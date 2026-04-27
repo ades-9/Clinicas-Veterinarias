@@ -1,3 +1,4 @@
+import httpx
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
@@ -6,27 +7,49 @@ from app.core.config import settings
 
 bearer = HTTPBearer()
 
-CLERK_JWKS_URL = "https://api.clerk.dev/v1/jwks"
+# Cache en memoria del JWKS de Clerk (se renueva si falla la verificación)
+_jwks_cache: dict | None = None
 
 
-def decode_clerk_token(token: str) -> dict:
-    """Decode and verify a Clerk JWT. Returns the payload."""
+async def _get_jwks() -> dict:
+    global _jwks_cache
+    if _jwks_cache is None:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(settings.clerk_jwks_url, timeout=10)
+            resp.raise_for_status()
+            _jwks_cache = resp.json()
+    return _jwks_cache
+
+
+async def decode_clerk_token(token: str) -> dict:
+    """Verifica y decodifica un JWT de Clerk usando JWKS (RS256)."""
+    global _jwks_cache
     try:
-        # Clerk tokens are RS256; in production fetch JWKS dynamically.
-        # For simplicity we decode without verification in dev and rely on
-        # Clerk middleware in production (Railway + Vercel handle HTTPS).
+        jwks = await _get_jwks()
         payload = jwt.decode(
             token,
-            settings.clerk_secret_key,
+            jwks,
             algorithms=["RS256"],
-            options={"verify_signature": settings.is_production},
+            options={"verify_aud": False},
         )
         return payload
-    except JWTError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token inválido o expirado",
-        ) from exc
+    except JWTError:
+        # Si falla, puede ser que el JWKS esté desactualizado — limpiamos caché y reintentamos
+        _jwks_cache = None
+        try:
+            jwks = await _get_jwks()
+            payload = jwt.decode(
+                token,
+                jwks,
+                algorithms=["RS256"],
+                options={"verify_aud": False},
+            )
+            return payload
+        except JWTError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token inválido o expirado",
+            ) from exc
 
 
 class CurrentUser:
@@ -39,7 +62,7 @@ class CurrentUser:
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer),
 ) -> CurrentUser:
-    payload = decode_clerk_token(credentials.credentials)
+    payload = await decode_clerk_token(credentials.credentials)
 
     user_id = payload.get("sub")
     clinic_id = payload.get("clinic_id")

@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     database_url: str
     clerk_secret_key: str
     clerk_publishable_key: str
+    clerk_jwks_url: str  # https://<tu-frontend-api>.clerk.accounts.dev/.well-known/jwks.json
     r2_account_id: str
     r2_access_key_id: str
     r2_secret_access_key: str
