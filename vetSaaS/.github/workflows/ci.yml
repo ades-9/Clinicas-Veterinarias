@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        env:
+          DATABASE_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/vetsaas_test"
+          CLERK_SECRET_KEY: "test_secret"
+          CLERK_PUBLISHABLE_KEY: "test_pub"
+          R2_ACCOUNT_ID: "test"
+          R2_ACCESS_KEY_ID: "test"
+          R2_SECRET_ACCESS_KEY: "test"
+          RESEND_API_KEY: "test"
+          ENVIRONMENT: "test"
+        run: pytest tests/ -v
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check & build
+        env:
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+          VITE_API_URL: "https://api.vetsaas.example.com"
+        run: npm run build
