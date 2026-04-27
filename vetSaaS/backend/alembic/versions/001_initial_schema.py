@@ -330,27 +330,6 @@ def upgrade() -> None:
     """)
 
     # ================================================================== #
-    # ROW LEVEL SECURITY
-    # ================================================================== #
-    rls_tables = [
-        "clinic_modules", "roles", "users", "owners", "patients",
-        "appointment_services", "appointments", "medical_records",
-        "medical_record_attachments", "vaccinations", "reminders",
-        "product_categories", "products", "stock_movements", "sales",
-    ]
-
-    for table in rls_tables:
-        op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
-        op.execute(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
-        op.execute(f"""
-            CREATE POLICY clinic_isolation ON {table}
-            USING (clinic_id = current_setting('app.current_clinic_id', TRUE)::uuid)
-        """)
-
-    # sale_items no tiene clinic_id directo — se aísla a través de sales
-    # No se aplica RLS directo; el acceso se controla vía JOIN con sales.
-
-    # ================================================================== #
     # Seed de permisos base
     # ================================================================== #
     permissions = [
