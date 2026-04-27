@@ -26,6 +26,7 @@ def upgrade() -> None:
     for table in RLS_TABLES:
         op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
         op.execute(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
+        op.execute(f"DROP POLICY IF EXISTS clinic_isolation ON {table}")
         op.execute(
             f"CREATE POLICY clinic_isolation ON {table} "
             f"USING (clinic_id = current_setting('app.current_clinic_id', TRUE)::uuid)"
