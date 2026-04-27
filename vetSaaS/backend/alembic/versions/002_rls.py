@@ -23,18 +23,41 @@ RLS_TABLES = [
 
 
 def upgrade() -> None:
-    for table in RLS_TABLES:
-        op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
-        op.execute(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
-        op.execute(f"DROP POLICY IF EXISTS clinic_isolation ON {table}")
-        op.execute(
-            f"CREATE POLICY clinic_isolation ON {table} "
-            f"USING (clinic_id = current_setting('app.current_clinic_id', TRUE)::uuid)"
-        )
+    tables_array = ", ".join(f"'{t}'" for t in RLS_TABLES)
+    op.execute(f"""
+        DO $$
+        DECLARE
+            t text;
+        BEGIN
+            FOREACH t IN ARRAY ARRAY[{tables_array}]
+            LOOP
+                EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+                EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+                EXECUTE format('DROP POLICY IF EXISTS clinic_isolation ON %I', t);
+                EXECUTE format(
+                    'CREATE POLICY clinic_isolation ON %I '
+                    'USING (clinic_id = current_setting(''app.current_clinic_id'', TRUE)::uuid)',
+                    t
+                );
+            END LOOP;
+        END
+        $$
+    """)
 
 
 def downgrade() -> None:
-    for table in reversed(RLS_TABLES):
-        op.execute(f"DROP POLICY IF EXISTS clinic_isolation ON {table}")
-        op.execute(f"ALTER TABLE {table} NO FORCE ROW LEVEL SECURITY")
-        op.execute(f"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY")
+    tables_array = ", ".join(f"'{t}'" for t in RLS_TABLES)
+    op.execute(f"""
+        DO $$
+        DECLARE
+            t text;
+        BEGIN
+            FOREACH t IN ARRAY ARRAY[{tables_array}]
+            LOOP
+                EXECUTE format('DROP POLICY IF EXISTS clinic_isolation ON %I', t);
+                EXECUTE format('ALTER TABLE %I NO FORCE ROW LEVEL SECURITY', t);
+                EXECUTE format('ALTER TABLE %I DISABLE ROW LEVEL SECURITY', t);
+            END LOOP;
+        END
+        $$
+    """)
