@@ -41,6 +41,21 @@ async def health():
     return {"status": "ok"}
 
 
-# Routers se registran aquí a medida que se implementan las fases:
-# from app.modules.configuration.router import router as configuration_router
-# app.include_router(configuration_router, prefix="/api/v1/configuration")
+from app.modules.appointments.router import router as appointments_router
+from app.modules.appointments.router import services_router as appointment_services_router
+from app.modules.configuration.register import router as register_router
+from app.modules.configuration.router import router as configuration_router
+from app.modules.medical_records.router import router as medical_records_router
+from app.modules.owners.router import router as owners_router
+from app.modules.patients.router import router as patients_router
+from app.modules.users.router import roles_router, router as users_router
+
+app.include_router(register_router, prefix="/api/v1")
+app.include_router(configuration_router, prefix="/api/v1")
+app.include_router(users_router, prefix="/api/v1")
+app.include_router(roles_router, prefix="/api/v1")
+app.include_router(owners_router, prefix="/api/v1")
+app.include_router(patients_router, prefix="/api/v1")
+app.include_router(appointment_services_router, prefix="/api/v1")
+app.include_router(appointments_router, prefix="/api/v1")
+app.include_router(medical_records_router, prefix="/api/v1")

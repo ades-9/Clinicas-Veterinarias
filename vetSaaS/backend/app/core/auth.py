@@ -77,6 +77,17 @@ async def get_current_user(
     return CurrentUser(user_id=user_id, clinic_id=clinic_id, role=role)
 
 
+async def get_clerk_user_id(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
+) -> str:
+    """Valida el token de Clerk y retorna solo el clerk_user_id (sin exigir clinic_id/role)."""
+    payload = await decode_clerk_token(credentials.credentials)
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
+    return user_id
+
+
 async def get_superadmin_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer),
 ) -> CurrentUser:

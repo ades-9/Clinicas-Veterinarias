@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -22,6 +23,6 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def set_rls_context(session: AsyncSession, clinic_id: str) -> None:
     """Set PostgreSQL RLS context variable for the current session."""
     await session.execute(
-        "SELECT set_config('app.current_clinic_id', :clinic_id, TRUE)",
+        text("SELECT set_config('app.current_clinic_id', :clinic_id, TRUE)"),
         {"clinic_id": clinic_id},
     )
