@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Pencil, Plus, XCircle } from "lucide-react"
 import { useState } from "react"
 import { useApiClient } from "@/api/client"
+import { PatientSearch } from "@/components/PatientSearch"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
@@ -55,6 +56,7 @@ export function AppointmentsPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null)
   const [editing, setEditing] = useState<Appointment | null>(null)
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
   const [form, setForm] = useState<ApptForm>(EMPTY)
   const [error, setError] = useState("")
 
@@ -66,15 +68,9 @@ export function AppointmentsPage() {
       ),
   })
 
-  const { data: patients = [] } = useQuery({
-    queryKey: ["patients"],
-    queryFn: () => api.get<Patient[]>("/patients?limit=200"),
-    enabled: formOpen,
-  })
-
   const { data: users = [] } = useQuery({
     queryKey: ["users"],
-    queryFn: () => api.get<User[]>("/users?limit=200"),
+    queryFn: () => api.get<User[]>("/users"),
     enabled: formOpen,
   })
 
@@ -99,12 +95,16 @@ export function AppointmentsPage() {
 
   const cancelMutation = useMutation({
     mutationFn: (id: string) => api.del(`/appointments/${id}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["appointments"] }); setCancelTarget(null) },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["appointments"] })
+      setCancelTarget(null)
+    },
     onError: (e: Error) => setError(e.message),
   })
 
   function openCreate() {
     setEditing(null)
+    setSelectedPatient(null)
     setForm(EMPTY)
     setError("")
     setFormOpen(true)
@@ -112,6 +112,7 @@ export function AppointmentsPage() {
 
   function openEdit(appt: Appointment) {
     setEditing(appt)
+    setSelectedPatient(null)
     setForm({
       patient_id: appt.patient_id,
       owner_id: appt.owner_id,
@@ -128,18 +129,27 @@ export function AppointmentsPage() {
   function closeForm() {
     setFormOpen(false)
     setEditing(null)
+    setSelectedPatient(null)
     setForm(EMPTY)
     setError("")
   }
 
-  function handlePatientChange(patientId: string) {
-    const patient = patients.find((p) => p.id === patientId)
-    setForm({ ...form, patient_id: patientId, owner_id: patient?.owner_id ?? "" })
+  function handlePatientChange(patient: Patient | null) {
+    setSelectedPatient(patient)
+    setForm((f) => ({
+      ...f,
+      patient_id: patient?.id ?? "",
+      owner_id: patient?.owner_id ?? "",
+    }))
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
+    if (!editing && !form.patient_id) {
+      setError("Selecciona un paciente")
+      return
+    }
     if (editing) {
       updateMutation.mutate({
         id: editing.id,
@@ -197,9 +207,7 @@ export function AppointmentsPage() {
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Paciente</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Propietario</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Servicio</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">
-                Fecha y hora
-              </th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Fecha y hora</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Estado</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Asignado a</th>
               <th className="px-4 py-3" />
@@ -276,30 +284,18 @@ export function AppointmentsPage() {
         className="max-w-lg"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          {!editing && (
-            <div className="space-y-1.5">
-              <Label htmlFor="patient_id">Paciente *</Label>
-              <Select
-                id="patient_id"
-                required
-                value={form.patient_id}
-                onChange={(e) => handlePatientChange(e.target.value)}
-              >
-                <option value="">Seleccionar paciente...</option>
-                {patients.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} — {p.owner_name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
-          {editing && (
+          {editing ? (
             <div className="rounded-md bg-muted/50 px-3 py-2 text-sm">
               <span className="text-muted-foreground">Paciente: </span>
               <span className="font-medium">{editing.patient_name}</span>
             </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label>Paciente *</Label>
+              <PatientSearch value={selectedPatient} onChange={handlePatientChange} />
+            </div>
           )}
+
           <div className="space-y-1.5">
             <Label htmlFor="service_id">Servicio *</Label>
             <Select
@@ -316,6 +312,7 @@ export function AppointmentsPage() {
               ))}
             </Select>
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="assigned_user_id">Asignado a *</Label>
             <Select
@@ -332,6 +329,7 @@ export function AppointmentsPage() {
               ))}
             </Select>
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="scheduled_at">Fecha y hora *</Label>
             <Input
@@ -342,13 +340,16 @@ export function AppointmentsPage() {
               onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })}
             />
           </div>
+
           {editing && (
             <div className="space-y-1.5">
               <Label htmlFor="status">Estado</Label>
               <Select
                 id="status"
                 value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value as AppointmentStatus })}
+                onChange={(e) =>
+                  setForm({ ...form, status: e.target.value as AppointmentStatus })
+                }
               >
                 <option value="pending">Pendiente</option>
                 <option value="confirmed">Confirmada</option>
@@ -356,6 +357,7 @@ export function AppointmentsPage() {
               </Select>
             </div>
           )}
+
           <div className="space-y-1.5">
             <Label htmlFor="notes">Notas</Label>
             <Textarea
@@ -365,6 +367,7 @@ export function AppointmentsPage() {
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
             />
           </div>
+
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={closeForm}>
