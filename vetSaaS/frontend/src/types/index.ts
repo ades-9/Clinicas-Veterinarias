@@ -124,3 +124,66 @@ export interface MedicalRecord {
   vaccinations: Vaccination[]
   attachments: Attachment[]
 }
+
+export interface ProductCategory {
+  id: string
+  clinic_id: string
+  name: string
+  created_at: string
+}
+
+export interface Product {
+  id: string
+  clinic_id: string
+  category_id: string | null
+  category_name: string | null
+  name: string
+  description: string | null
+  sku: string | null
+  unit: string
+  price: number
+  cost: number | null
+  stock: number
+  min_stock: number
+  is_active: boolean
+  created_at: string
+}
+
+export type MovementType = "entry" | "exit" | "adjustment"
+
+export interface StockMovement {
+  id: string
+  clinic_id: string
+  product_id: string
+  product_name: string
+  user_id: string | null
+  movement_type: MovementType
+  quantity: number
+  reason: string | null
+  created_at: string
+}
+
+export interface SaleItem {
+  id: string
+  clinic_id: string
+  sale_id: string
+  product_id: string
+  product_name: string
+  quantity: number
+  unit_price: number
+  subtotal: number
+}
+
+export interface Sale {
+  id: string
+  clinic_id: string
+  user_id: string | null
+  patient_id: string | null
+  patient_name: string | null
+  owner_id: string | null
+  owner_name: string | null
+  total: number
+  notes: string | null
+  created_at: string
+  items: SaleItem[]
+}

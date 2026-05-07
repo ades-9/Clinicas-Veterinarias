@@ -4,7 +4,9 @@ import {
   ClipboardList,
   Cog,
   LayoutDashboard,
+  Package,
   PawPrint,
+  ShoppingCart,
   Stethoscope,
   Users,
 } from "lucide-react"
@@ -17,6 +19,8 @@ const NAV_ITEMS = [
   { to: "/patients", icon: PawPrint, label: "Pacientes" },
   { to: "/appointments", icon: Calendar, label: "Citas" },
   { to: "/medical-records", icon: Stethoscope, label: "Historia Clínica" },
+  { to: "/products", icon: Package, label: "Inventario" },
+  { to: "/sales", icon: ShoppingCart, label: "Ventas" },
   { to: "/configuration", icon: Cog, label: "Configuración" },
 ]
 

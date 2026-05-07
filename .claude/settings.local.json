@@ -6,7 +6,8 @@
       "Bash(python -c ' *)",
       "Bash(dir \"C:/Users/aescalante/Desktop/PROYECTOS/PERSONALES/Clinicas Veterinarias/vetSaaS/frontend\")",
       "Bash(npm install *)",
-      "Bash(npx tailwindcss *)"
+      "Bash(npx tailwindcss *)",
+      "Bash(.venv\\\\Scripts\\\\python.exe -m alembic upgrade head)"
     ]
   }
 }
