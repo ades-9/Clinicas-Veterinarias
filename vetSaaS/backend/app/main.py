@@ -43,6 +43,7 @@ async def health():
 
 from app.modules.appointments.router import router as appointments_router
 from app.modules.appointments.router import services_router as appointment_services_router
+from app.modules.catalog.router import router as catalog_router
 from app.modules.configuration.register import router as register_router
 from app.modules.configuration.router import router as configuration_router
 from app.modules.medical_records.router import router as medical_records_router
@@ -52,6 +53,7 @@ from app.modules.products.router import categories_router, movements_router, rou
 from app.modules.sales.router import router as sales_router
 from app.modules.users.router import roles_router, router as users_router
 
+app.include_router(catalog_router, prefix="/api/v1")
 app.include_router(register_router, prefix="/api/v1")
 app.include_router(configuration_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")

@@ -8,13 +8,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import type { Owner, Patient } from "@/types"
+import type { Breed, Owner, Patient, Species } from "@/types"
 
 interface PatientForm {
   owner_id: string
   name: string
-  species: string
-  breed: string
+  species_id: string
+  breed_id: string
   birth_date: string
   weight: string
   vaccination_code: string
@@ -22,19 +22,13 @@ interface PatientForm {
 }
 
 const EMPTY: PatientForm = {
-  owner_id: "",
-  name: "",
-  species: "",
-  breed: "",
-  birth_date: "",
-  weight: "",
-  vaccination_code: "",
-  notes: "",
+  owner_id: "", name: "", species_id: "", breed_id: "",
+  birth_date: "", weight: "", vaccination_code: "", notes: "",
 }
 
 export function PatientsPage() {
   const api = useApiClient()
-  const queryClient = useQueryClient()
+  const qc = useQueryClient()
 
   const [search, setSearch] = useState("")
   const [formOpen, setFormOpen] = useState(false)
@@ -54,61 +48,67 @@ export function PatientsPage() {
     enabled: formOpen,
   })
 
+  const { data: speciesList = [] } = useQuery({
+    queryKey: ["catalog-species"],
+    queryFn: () => api.get<Species[]>("/catalog/species"),
+    staleTime: Infinity,
+  })
+
+  const { data: breeds = [] } = useQuery({
+    queryKey: ["catalog-breeds", form.species_id],
+    queryFn: () =>
+      api.get<Breed[]>(`/catalog/breeds?species_id=${form.species_id}`),
+    enabled: !!form.species_id,
+    staleTime: Infinity,
+  })
+
   const createMutation = useMutation({
-    mutationFn: (data: object) => api.post<Patient>("/patients", data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["patients"] }); closeForm() },
+    mutationFn: (d: object) => api.post<Patient>("/patients", d),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["patients"] }); closeForm() },
     onError: (e: Error) => setError(e.message),
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: object }) =>
-      api.patch<Patient>(`/patients/${id}`, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["patients"] }); closeForm() },
+    mutationFn: ({ id, d }: { id: string; d: object }) => api.patch<Patient>(`/patients/${id}`, d),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["patients"] }); closeForm() },
     onError: (e: Error) => setError(e.message),
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.del(`/patients/${id}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["patients"] }); setDeleteTarget(null) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["patients"] }); setDeleteTarget(null) },
     onError: (e: Error) => setError(e.message),
   })
 
   function openCreate() {
-    setEditing(null)
-    setForm(EMPTY)
-    setError("")
-    setFormOpen(true)
+    setEditing(null); setForm(EMPTY); setError(""); setFormOpen(true)
   }
 
-  function openEdit(patient: Patient) {
-    setEditing(patient)
+  function openEdit(p: Patient) {
+    setEditing(p)
     setForm({
-      owner_id: patient.owner_id,
-      name: patient.name,
-      species: patient.species ?? "",
-      breed: patient.breed ?? "",
-      birth_date: patient.birth_date ?? "",
-      weight: patient.weight?.toString() ?? "",
-      vaccination_code: patient.vaccination_code ?? "",
-      notes: patient.notes ?? "",
+      owner_id: p.owner_id,
+      name: p.name,
+      species_id: p.species_id ?? "",
+      breed_id: p.breed_id ?? "",
+      birth_date: p.birth_date ?? "",
+      weight: p.weight?.toString() ?? "",
+      vaccination_code: p.vaccination_code ?? "",
+      notes: p.notes ?? "",
     })
-    setError("")
-    setFormOpen(true)
+    setError(""); setFormOpen(true)
   }
 
   function closeForm() {
-    setFormOpen(false)
-    setEditing(null)
-    setForm(EMPTY)
-    setError("")
+    setFormOpen(false); setEditing(null); setForm(EMPTY); setError("")
   }
 
   function buildPayload() {
     return {
       owner_id: form.owner_id,
       name: form.name,
-      species: form.species || null,
-      breed: form.breed || null,
+      species_id: form.species_id || null,
+      breed_id: form.breed_id || null,
       birth_date: form.birth_date || null,
       weight: form.weight ? parseFloat(form.weight) : null,
       vaccination_code: form.vaccination_code || null,
@@ -117,13 +117,13 @@ export function PatientsPage() {
   }
 
   function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError("")
-    if (editing) {
-      updateMutation.mutate({ id: editing.id, data: buildPayload() })
-    } else {
-      createMutation.mutate(buildPayload())
-    }
+    e.preventDefault(); setError("")
+    if (editing) updateMutation.mutate({ id: editing.id, d: buildPayload() })
+    else createMutation.mutate(buildPayload())
+  }
+
+  function handleSpeciesChange(speciesId: string) {
+    setForm((f) => ({ ...f, species_id: speciesId, breed_id: "" }))
   }
 
   const isSaving = createMutation.isPending || updateMutation.isPending
@@ -156,24 +156,16 @@ export function PatientsPage() {
           <thead className="border-b bg-muted/50">
             <tr>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nombre</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">
-                Especie / Raza
-              </th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Especie / Raza</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Propietario</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Peso</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">
-                Cód. Vacuna
-              </th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Cód. Vacuna</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                  Cargando...
-                </td>
-              </tr>
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Cargando...</td></tr>
             ) : patients.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
@@ -181,33 +173,28 @@ export function PatientsPage() {
                 </td>
               </tr>
             ) : (
-              patients.map((patient) => (
-                <tr
-                  key={patient.id}
-                  className="border-b last:border-0 hover:bg-muted/30 transition-colors"
-                >
-                  <td className="px-4 py-3 font-medium">{patient.name}</td>
+              patients.map((p) => (
+                <tr key={p.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                  <td className="px-4 py-3 font-medium">{p.name}</td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {[patient.species, patient.breed].filter(Boolean).join(" · ") || "—"}
+                    {[p.species_name, p.breed_name].filter(Boolean).join(" · ") || "—"}
                   </td>
-                  <td className="px-4 py-3">{patient.owner_name}</td>
+                  <td className="px-4 py-3">{p.owner_name}</td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {patient.weight != null ? `${patient.weight} kg` : "—"}
+                    {p.weight != null ? `${p.weight} kg` : "—"}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {patient.vaccination_code ?? "—"}
-                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">{p.vaccination_code ?? "—"}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
                       <button
-                        onClick={() => openEdit(patient)}
+                        onClick={() => openEdit(p)}
                         className="rounded p-1.5 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
                         title="Editar"
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => { setError(""); setDeleteTarget(patient) }}
+                        onClick={() => { setError(""); setDeleteTarget(p) }}
                         className="rounded p-1.5 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                         title="Eliminar"
                       >
@@ -223,101 +210,61 @@ export function PatientsPage() {
       </div>
 
       {/* Crear / Editar */}
-      <Dialog
-        open={formOpen}
-        onClose={closeForm}
-        title={editing ? "Editar paciente" : "Nuevo paciente"}
-        className="max-w-lg"
-      >
+      <Dialog open={formOpen} onClose={closeForm} title={editing ? "Editar paciente" : "Nuevo paciente"} className="max-w-lg">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="owner_id">Propietario *</Label>
-            <Select
-              id="owner_id"
-              required
-              value={form.owner_id}
-              onChange={(e) => setForm({ ...form, owner_id: e.target.value })}
-            >
+            <Select id="owner_id" required value={form.owner_id} onChange={(e) => setForm({ ...form, owner_id: e.target.value })}>
               <option value="">Seleccionar propietario...</option>
-              {owners.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.full_name}
-                </option>
-              ))}
+              {owners.map((o) => <option key={o.id} value={o.id}>{o.full_name}</option>)}
             </Select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="name">Nombre *</Label>
-            <Input
-              id="name"
-              required
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
+            <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="species">Especie</Label>
-              <Input
-                id="species"
-                placeholder="ej. Perro, Gato"
-                value={form.species}
-                onChange={(e) => setForm({ ...form, species: e.target.value })}
-              />
+              <Label htmlFor="species_id">Especie</Label>
+              <Select id="species_id" value={form.species_id} onChange={(e) => handleSpeciesChange(e.target.value)}>
+                <option value="">Seleccionar...</option>
+                {speciesList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="breed">Raza</Label>
-              <Input
-                id="breed"
-                value={form.breed}
-                onChange={(e) => setForm({ ...form, breed: e.target.value })}
-              />
+              <Label htmlFor="breed_id">Raza</Label>
+              <Select
+                id="breed_id"
+                value={form.breed_id}
+                disabled={!form.species_id}
+                onChange={(e) => setForm({ ...form, breed_id: e.target.value })}
+              >
+                <option value="">{form.species_id ? "Seleccionar..." : "Primero elige especie"}</option>
+                {breeds.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </Select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="birth_date">Fecha de nacimiento</Label>
-              <Input
-                id="birth_date"
-                type="date"
-                value={form.birth_date}
-                onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
-              />
+              <Input id="birth_date" type="date" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="weight">Peso (kg)</Label>
-              <Input
-                id="weight"
-                type="number"
-                step="0.01"
-                min="0"
-                value={form.weight}
-                onChange={(e) => setForm({ ...form, weight: e.target.value })}
-              />
+              <Input id="weight" type="number" step="0.01" min="0" value={form.weight} onChange={(e) => setForm({ ...form, weight: e.target.value })} />
             </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="vaccination_code">Código de vacunación</Label>
-            <Input
-              id="vaccination_code"
-              value={form.vaccination_code}
-              onChange={(e) => setForm({ ...form, vaccination_code: e.target.value })}
-            />
+            <Input id="vaccination_code" value={form.vaccination_code} onChange={(e) => setForm({ ...form, vaccination_code: e.target.value })} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="notes">Notas</Label>
-            <Textarea
-              id="notes"
-              rows={3}
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            />
+            <Textarea id="notes" rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={closeForm}>
-              Cancelar
-            </Button>
+            <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
             <Button type="submit" disabled={isSaving}>
               {isSaving ? "Guardando..." : editing ? "Guardar cambios" : "Crear paciente"}
             </Button>
@@ -326,21 +273,14 @@ export function PatientsPage() {
       </Dialog>
 
       {/* Confirmar eliminación */}
-      <Dialog
-        open={deleteTarget !== null}
-        onClose={() => setDeleteTarget(null)}
-        title="Eliminar paciente"
-      >
+      <Dialog open={deleteTarget !== null} onClose={() => setDeleteTarget(null)} title="Eliminar paciente">
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            ¿Estás seguro de que deseas eliminar a{" "}
-            <span className="font-medium text-foreground">{deleteTarget?.name}</span>?
+            ¿Eliminar a <span className="font-medium text-foreground">{deleteTarget?.name}</span>?
           </p>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
-              Cancelar
-            </Button>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancelar</Button>
             <Button
               variant="destructive"
               disabled={deleteMutation.isPending}

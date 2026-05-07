@@ -14,6 +14,7 @@ class AppointmentServiceRead(BaseModel):
     name: str
     service_type: ServiceType
     duration_minutes: int
+    price: float
     created_at: datetime
 
 
@@ -21,12 +22,14 @@ class AppointmentServiceCreate(BaseModel):
     name: str
     service_type: ServiceType
     duration_minutes: int = 30
+    price: float = 0.0
 
 
 class AppointmentServiceUpdate(BaseModel):
     name: str | None = None
     service_type: ServiceType | None = None
     duration_minutes: int | None = None
+    price: float | None = None
 
 
 class AppointmentRead(BaseModel):

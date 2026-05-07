@@ -184,9 +184,10 @@ interface ServiceForm {
   name: string
   service_type: "veterinary" | "grooming" | ""
   duration_minutes: string
+  price: string
 }
 
-const EMPTY_SERVICE: ServiceForm = { name: "", service_type: "", duration_minutes: "30" }
+const EMPTY_SERVICE: ServiceForm = { name: "", service_type: "", duration_minutes: "30", price: "0" }
 
 const SERVICE_TYPE_LABELS: Record<"veterinary" | "grooming", string> = {
   veterinary: "Veterinaria",
@@ -249,6 +250,7 @@ function ServicesSection() {
       name: s.name,
       service_type: s.service_type,
       duration_minutes: s.duration_minutes.toString(),
+      price: s.price.toString(),
     })
     setError("")
     setFormOpen(true)
@@ -268,6 +270,7 @@ function ServicesSection() {
       name: form.name,
       service_type: form.service_type,
       duration_minutes: parseInt(form.duration_minutes, 10),
+      price: parseFloat(form.price) || 0,
     }
     if (editing) {
       updateMutation.mutate({ id: editing.id, data: payload })
@@ -306,6 +309,7 @@ function ServicesSection() {
               <th className="text-left py-2 font-medium text-muted-foreground">Nombre</th>
               <th className="text-left py-2 font-medium text-muted-foreground">Tipo</th>
               <th className="text-left py-2 font-medium text-muted-foreground">Duración</th>
+              <th className="text-right py-2 font-medium text-muted-foreground">Precio</th>
               <th className="py-2" />
             </tr>
           </thead>
@@ -322,6 +326,9 @@ function ServicesSection() {
                   </Badge>
                 </td>
                 <td className="py-3 text-muted-foreground">{s.duration_minutes} min</td>
+                <td className="py-3 text-right font-medium">
+                  {new Intl.NumberFormat("es", { style: "currency", currency: "USD" }).format(s.price)}
+                </td>
                 <td className="py-3">
                   <div className="flex justify-end gap-1">
                     <button
@@ -389,6 +396,17 @@ function ServicesSection() {
               step="5"
               value={form.duration_minutes}
               onChange={(e) => setForm({ ...form, duration_minutes: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="svc_price">Precio (USD)</Label>
+            <Input
+              id="svc_price"
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.price}
+              onChange={(e) => setForm({ ...form, price: e.target.value })}
             />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}

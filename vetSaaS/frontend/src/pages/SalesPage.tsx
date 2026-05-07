@@ -6,20 +6,21 @@ import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import type { Owner, Patient, Product, Sale, SaleItem } from "@/types"
-
-// ── helpers ───────────────────────────────────────────────────────────────────
+import type { Appointment, AppointmentService, Owner, Patient, Product, Sale, SaleItem } from "@/types"
 
 function fmt(n: number) {
-  return new Intl.NumberFormat("es", { style: "currency", currency: "COP", minimumFractionDigits: 0 }).format(n)
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n)
 }
 
-// ── cart ──────────────────────────────────────────────────────────────────────
+// ── cart item ─────────────────────────────────────────────────────────────────
 
 interface CartItem {
-  product: Product
+  id: string
+  type: "product" | "service"
+  name: string
   quantity: number
   unit_price: number
+  max_stock?: number
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
@@ -30,14 +31,17 @@ export function SalesPage() {
 
   const [newSaleOpen, setNewSaleOpen] = useState(false)
   const [cart, setCart] = useState<CartItem[]>([])
-  const [patientId, setPatientId] = useState("")
+  const [appointmentId, setAppointmentId] = useState("")
   const [ownerId, setOwnerId] = useState("")
+  const [patientId, setPatientId] = useState("")
   const [notes, setNotes] = useState("")
   const [saleError, setSaleError] = useState("")
 
   const [detailSale, setDetailSale] = useState<Sale | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Sale | null>(null)
   const [deleteError, setDeleteError] = useState("")
+
+  // ── queries ───────────────────────────────────────────────────────────────
 
   const { data: sales = [], isLoading } = useQuery({
     queryKey: ["sales"],
@@ -50,17 +54,36 @@ export function SalesPage() {
     enabled: newSaleOpen,
   })
 
+  const { data: services = [] } = useQuery({
+    queryKey: ["appointment-services"],
+    queryFn: () => api.get<AppointmentService[]>("/appointment-services"),
+    enabled: newSaleOpen,
+  })
+
   const { data: owners = [] } = useQuery({
     queryKey: ["owners-all"],
     queryFn: () => api.get<Owner[]>("/owners?limit=200"),
     enabled: newSaleOpen,
   })
 
-  const { data: patients = [] } = useQuery({
+  const { data: allPatients = [] } = useQuery({
     queryKey: ["patients-all"],
-    queryFn: () => api.get<Patient[]>("/patients?limit=200"),
+    queryFn: () => api.get<Patient[]>("/patients?limit=500"),
     enabled: newSaleOpen,
   })
+
+  const { data: appointments = [] } = useQuery({
+    queryKey: ["appointments-recent"],
+    queryFn: () => api.get<Appointment[]>("/appointments?limit=50&offset=0"),
+    enabled: newSaleOpen,
+  })
+
+  // Pacientes filtrados por propietario seleccionado
+  const patients = ownerId
+    ? allPatients.filter((p) => p.owner_id === ownerId)
+    : allPatients
+
+  // ── mutations ─────────────────────────────────────────────────────────────
 
   const createSale = useMutation({
     mutationFn: (d: object) => api.post<Sale>("/sales", d),
@@ -79,51 +102,91 @@ export function SalesPage() {
     onError: (e: Error) => setDeleteError(e.message),
   })
 
+  // ── form helpers ──────────────────────────────────────────────────────────
+
   function closeNewSale() {
     setNewSaleOpen(false)
     setCart([])
-    setPatientId("")
+    setAppointmentId("")
     setOwnerId("")
+    setPatientId("")
     setNotes("")
     setSaleError("")
   }
 
-  function addToCart(product: Product) {
-    setCart((prev) => {
-      const existing = prev.find((i) => i.product.id === product.id)
-      if (existing) {
-        return prev.map((i) =>
-          i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i
-        )
-      }
-      return [...prev, { product, quantity: 1, unit_price: product.price }]
-    })
-  }
-
-  function updateQty(productId: string, qty: number) {
-    if (qty <= 0) {
-      setCart((prev) => prev.filter((i) => i.product.id !== productId))
-    } else {
-      setCart((prev) => prev.map((i) => i.product.id === productId ? { ...i, quantity: qty } : i))
+  function handleAppointmentChange(apptId: string) {
+    setAppointmentId(apptId)
+    if (!apptId) return
+    const appt = appointments.find((a) => a.id === apptId)
+    if (appt) {
+      setOwnerId(appt.owner_id)
+      setPatientId(appt.patient_id)
     }
   }
 
-  function updatePrice(productId: string, price: number) {
-    setCart((prev) => prev.map((i) => i.product.id === productId ? { ...i, unit_price: price } : i))
+  function handleOwnerChange(id: string) {
+    setOwnerId(id)
+    setPatientId("")
+    if (!id) setAppointmentId("")
+  }
+
+  function addProduct(product: Product) {
+    setCart((prev) => {
+      const existing = prev.find((i) => i.type === "product" && i.id === product.id)
+      if (existing) {
+        return prev.map((i) =>
+          i.type === "product" && i.id === product.id
+            ? { ...i, quantity: i.quantity + 1 }
+            : i
+        )
+      }
+      return [...prev, {
+        id: product.id, type: "product", name: product.name,
+        quantity: 1, unit_price: product.price, max_stock: product.stock,
+      }]
+    })
+  }
+
+  function addService(service: AppointmentService) {
+    setCart((prev) => {
+      const existing = prev.find((i) => i.type === "service" && i.id === service.id)
+      if (existing) return prev
+      return [...prev, {
+        id: service.id, type: "service", name: service.name,
+        quantity: 1, unit_price: service.price,
+      }]
+    })
+  }
+
+  function updateQty(id: string, type: CartItem["type"], qty: number) {
+    if (qty <= 0) {
+      setCart((prev) => prev.filter((i) => !(i.id === id && i.type === type)))
+    } else {
+      setCart((prev) => prev.map((i) =>
+        i.id === id && i.type === type ? { ...i, quantity: qty } : i
+      ))
+    }
+  }
+
+  function updatePrice(id: string, type: CartItem["type"], price: number) {
+    setCart((prev) => prev.map((i) =>
+      i.id === id && i.type === type ? { ...i, unit_price: price } : i
+    ))
   }
 
   const cartTotal = cart.reduce((s, i) => s + i.quantity * i.unit_price, 0)
 
   function handleCreateSale(e: React.FormEvent) {
-    e.preventDefault()
-    setSaleError("")
-    if (cart.length === 0) { setSaleError("Agrega al menos un producto"); return }
+    e.preventDefault(); setSaleError("")
+    if (cart.length === 0) { setSaleError("Agrega al menos un ítem"); return }
     createSale.mutate({
+      appointment_id: appointmentId || null,
       patient_id: patientId || null,
       owner_id: ownerId || null,
       notes: notes || null,
       items: cart.map((i) => ({
-        product_id: i.product.id,
+        product_id: i.type === "product" ? i.id : null,
+        service_id: i.type === "service" ? i.id : null,
         quantity: i.quantity,
         unit_price: i.unit_price,
       })),
@@ -132,11 +195,10 @@ export function SalesPage() {
 
   return (
     <div className="space-y-6">
-      {/* header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Ventas</h1>
-          <p className="text-sm text-muted-foreground">Registro de ventas de productos</p>
+          <p className="text-sm text-muted-foreground">Registro de ventas de productos y servicios</p>
         </div>
         <Button onClick={() => setNewSaleOpen(true)}>
           <ShoppingCart className="h-4 w-4" />
@@ -199,7 +261,27 @@ export function SalesPage() {
       {/* Modal nueva venta */}
       <Dialog open={newSaleOpen} onClose={closeNewSale} title="Nueva venta">
         <form onSubmit={handleCreateSale} className="space-y-5">
-          {/* cliente opcional */}
+
+          {/* Vincular cita */}
+          <div className="space-y-1.5">
+            <Label htmlFor="s-appt">Cita (opcional)</Label>
+            <select
+              id="s-appt"
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+              value={appointmentId}
+              onChange={(e) => handleAppointmentChange(e.target.value)}
+            >
+              <option value="">Sin cita vinculada</option>
+              {appointments.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {new Date(a.scheduled_at).toLocaleDateString("es", { day: "numeric", month: "short" })}
+                  {" — "}{a.patient_name} · {a.service_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Propietario / Paciente */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="s-owner">Propietario</Label>
@@ -207,12 +289,10 @@ export function SalesPage() {
                 id="s-owner"
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                 value={ownerId}
-                onChange={(e) => setOwnerId(e.target.value)}
+                onChange={(e) => handleOwnerChange(e.target.value)}
               >
                 <option value="">Sin propietario</option>
-                {owners.map((o) => (
-                  <option key={o.id} value={o.id}>{o.full_name}</option>
-                ))}
+                {owners.map((o) => <option key={o.id} value={o.id}>{o.full_name}</option>)}
               </select>
             </div>
             <div className="space-y-1.5">
@@ -225,59 +305,86 @@ export function SalesPage() {
               >
                 <option value="">Sin paciente</option>
                 {patients.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} ({p.owner_name})</option>
+                  <option key={p.id} value={p.id}>
+                    {p.name}{!ownerId ? ` (${p.owner_name})` : ""}
+                  </option>
                 ))}
               </select>
             </div>
           </div>
 
-          {/* productos disponibles */}
+          {/* Agregar productos */}
           <div className="space-y-2">
-            <Label>Agregar productos</Label>
-            <div className="max-h-40 overflow-y-auto rounded-md border divide-y">
-              {products.filter((p) => p.is_active && p.stock > 0).map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => addToCart(p)}
-                  className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-accent transition-colors text-left"
-                >
-                  <span>
-                    <span className="font-medium">{p.name}</span>
-                    <span className="text-muted-foreground ml-2">Stock: {p.stock}</span>
-                  </span>
-                  <span className="text-muted-foreground">{fmt(p.price)}</span>
-                </button>
-              ))}
+            <Label>Productos disponibles</Label>
+            <div className="max-h-32 overflow-y-auto rounded-md border divide-y">
+              {products.filter((p) => p.is_active && p.stock > 0).length === 0 ? (
+                <p className="px-3 py-2 text-sm text-muted-foreground">Sin productos en stock</p>
+              ) : (
+                products.filter((p) => p.is_active && p.stock > 0).map((p) => (
+                  <button
+                    key={p.id} type="button" onClick={() => addProduct(p)}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-accent transition-colors text-left"
+                  >
+                    <span>
+                      <span className="font-medium">{p.name}</span>
+                      <span className="text-muted-foreground ml-2 text-xs">Stock: {p.stock}</span>
+                    </span>
+                    <span className="text-muted-foreground">{fmt(p.price)}</span>
+                  </button>
+                ))
+              )}
             </div>
           </div>
 
-          {/* carrito */}
+          {/* Agregar servicios */}
+          <div className="space-y-2">
+            <Label>Servicios del tarifario</Label>
+            <div className="max-h-28 overflow-y-auto rounded-md border divide-y">
+              {services.length === 0 ? (
+                <p className="px-3 py-2 text-sm text-muted-foreground">Sin servicios configurados</p>
+              ) : (
+                services.map((s) => (
+                  <button
+                    key={s.id} type="button" onClick={() => addService(s)}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-accent transition-colors text-left"
+                  >
+                    <span className="font-medium">{s.name}</span>
+                    <span className="text-muted-foreground">{fmt(s.price)}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Carrito */}
           {cart.length > 0 && (
             <div className="space-y-2">
               <Label>Carrito</Label>
               <div className="rounded-md border divide-y">
                 {cart.map((item) => (
-                  <div key={item.product.id} className="flex items-center gap-3 px-3 py-2">
-                    <span className="flex-1 text-sm font-medium truncate">{item.product.name}</span>
-                    <div className="flex items-center gap-1">
-                      <button type="button" onClick={() => updateQty(item.product.id, item.quantity - 1)}>
+                  <div key={`${item.type}-${item.id}`} className="flex items-center gap-3 px-3 py-2">
+                    <span className="flex-1 text-sm truncate">
+                      <span className="font-medium">{item.name}</span>
+                      <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded ${item.type === "service" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                        {item.type === "service" ? "servicio" : "producto"}
+                      </span>
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button type="button" onClick={() => updateQty(item.id, item.type, item.quantity - 1)}>
                         <Minus className="h-3.5 w-3.5 text-muted-foreground" />
                       </button>
-                      <span className="w-8 text-center text-sm">{item.quantity}</span>
-                      <button type="button" onClick={() => updateQty(item.product.id, item.quantity + 1)}>
+                      <span className="w-7 text-center text-sm">{item.quantity}</span>
+                      <button type="button" onClick={() => updateQty(item.id, item.type, item.quantity + 1)}>
                         <Plus className="h-3.5 w-3.5 text-muted-foreground" />
                       </button>
                     </div>
                     <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="w-28 text-right"
+                      type="number" min="0" step="0.01"
+                      className="w-24 text-right"
                       value={item.unit_price}
-                      onChange={(e) => updatePrice(item.product.id, parseFloat(e.target.value) || 0)}
+                      onChange={(e) => updatePrice(item.id, item.type, parseFloat(e.target.value) || 0)}
                     />
-                    <button type="button" onClick={() => updateQty(item.product.id, 0)}>
+                    <button type="button" onClick={() => updateQty(item.id, item.type, 0)}>
                       <X className="h-4 w-4 text-muted-foreground hover:text-destructive" />
                     </button>
                   </div>
@@ -289,7 +396,7 @@ export function SalesPage() {
             </div>
           )}
 
-          {/* notas */}
+          {/* Notas */}
           <div className="space-y-1.5">
             <Label htmlFor="s-notes">Notas</Label>
             <Input id="s-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -300,7 +407,7 @@ export function SalesPage() {
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={closeNewSale}>Cancelar</Button>
             <Button type="submit" disabled={createSale.isPending || cart.length === 0}>
-              {createSale.isPending ? "Procesando..." : `Confirmar ${cart.length > 0 ? fmt(cartTotal) : ""}`}
+              {createSale.isPending ? "Procesando..." : `Confirmar${cart.length > 0 ? ` ${fmt(cartTotal)}` : ""}`}
             </Button>
           </div>
         </form>
@@ -317,9 +424,7 @@ export function SalesPage() {
               {detailSale.notes && <p>Notas: {detailSale.notes}</p>}
             </div>
             <SaleItemsTable items={detailSale.items} />
-            <div className="flex justify-end font-semibold text-sm">
-              Total: {fmt(detailSale.total)}
-            </div>
+            <div className="flex justify-end font-semibold text-sm">Total: {fmt(detailSale.total)}</div>
             <div className="flex justify-end">
               <Button variant="outline" onClick={() => setDetailSale(null)}>Cerrar</Button>
             </div>
@@ -357,7 +462,7 @@ function SaleItemsTable({ items }: { items: SaleItem[] }) {
     <table className="w-full text-sm border rounded-md overflow-hidden">
       <thead className="bg-muted/50 border-b">
         <tr>
-          <th className="text-left px-3 py-2 font-medium text-muted-foreground">Producto</th>
+          <th className="text-left px-3 py-2 font-medium text-muted-foreground">Ítem</th>
           <th className="text-right px-3 py-2 font-medium text-muted-foreground">Cant.</th>
           <th className="text-right px-3 py-2 font-medium text-muted-foreground">Precio u.</th>
           <th className="text-right px-3 py-2 font-medium text-muted-foreground">Subtotal</th>
@@ -366,13 +471,18 @@ function SaleItemsTable({ items }: { items: SaleItem[] }) {
       <tbody>
         {items.map((item) => (
           <tr key={item.id} className="border-b last:border-0">
-            <td className="px-3 py-2">{item.product_name}</td>
+            <td className="px-3 py-2">
+              <span>{item.item_name}</span>
+              <span className={`ml-1.5 text-xs px-1 py-0.5 rounded ${item.service_id ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                {item.service_id ? "servicio" : "producto"}
+              </span>
+            </td>
             <td className="px-3 py-2 text-right">{item.quantity}</td>
             <td className="px-3 py-2 text-right text-muted-foreground">
-              {new Intl.NumberFormat("es", { style: "currency", currency: "COP", minimumFractionDigits: 0 }).format(item.unit_price)}
+              {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(item.unit_price)}
             </td>
             <td className="px-3 py-2 text-right font-medium">
-              {new Intl.NumberFormat("es", { style: "currency", currency: "COP", minimumFractionDigits: 0 }).format(item.subtotal)}
+              {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(item.subtotal)}
             </td>
           </tr>
         ))}

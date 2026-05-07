@@ -44,8 +44,10 @@ export interface Patient {
   owner_id: string
   owner_name: string
   name: string
-  species: string | null
-  breed: string | null
+  species_id: string | null
+  species_name: string | null
+  breed_id: string | null
+  breed_name: string | null
   birth_date: string | null
   weight: number | null
   vaccination_code: string | null
@@ -62,7 +64,24 @@ export interface AppointmentService {
   name: string
   service_type: ServiceType
   duration_minutes: number
+  price: number
   created_at: string
+}
+
+export interface Species {
+  id: string
+  name: string
+}
+
+export interface Breed {
+  id: string
+  species_id: string
+  name: string
+}
+
+export interface ProductUnit {
+  id: string
+  name: string
 }
 
 export interface Appointment {
@@ -167,8 +186,9 @@ export interface SaleItem {
   id: string
   clinic_id: string
   sale_id: string
-  product_id: string
-  product_name: string
+  product_id: string | null
+  service_id: string | null
+  item_name: string
   quantity: number
   unit_price: number
   subtotal: number
@@ -178,6 +198,7 @@ export interface Sale {
   id: string
   clinic_id: string
   user_id: string | null
+  appointment_id: string | null
   patient_id: string | null
   patient_name: string | null
   owner_id: string | null

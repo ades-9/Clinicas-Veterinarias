@@ -13,7 +13,7 @@ from app.modules.appointments.schemas import (
 )
 
 _SERVICE_SELECT = """
-    SELECT id, clinic_id, name, service_type, duration_minutes, created_at
+    SELECT id, clinic_id, name, service_type, duration_minutes, price, created_at
     FROM appointment_services
     WHERE deleted_at IS NULL
 """
@@ -57,8 +57,8 @@ async def create_service(clinic_id: str, data: AppointmentServiceCreate, session
     await set_rls_context(session, clinic_id)
     result = await session.execute(
         text("""
-            INSERT INTO appointment_services (clinic_id, name, service_type, duration_minutes)
-            VALUES (:clinic_id, :name, :service_type, :duration_minutes)
+            INSERT INTO appointment_services (clinic_id, name, service_type, duration_minutes, price)
+            VALUES (:clinic_id, :name, :service_type, :duration_minutes, :price)
             RETURNING id
         """),
         {"clinic_id": clinic_id, **data.model_dump()},

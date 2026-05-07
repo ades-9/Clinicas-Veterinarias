@@ -8,8 +8,8 @@ from app.core.database import set_rls_context
 from app.modules.sales.schemas import SaleCreate, SaleItemRead, SaleRead
 
 _SALE_SELECT = """
-    SELECT s.id, s.clinic_id, s.user_id, s.patient_id,
-           p.name AS patient_name,
+    SELECT s.id, s.clinic_id, s.user_id, s.appointment_id,
+           s.patient_id, p.name AS patient_name,
            s.owner_id, o.full_name AS owner_name,
            s.total, s.notes, s.created_at
     FROM sales s
@@ -19,10 +19,12 @@ _SALE_SELECT = """
 """
 
 _ITEMS_SELECT = """
-    SELECT si.id, si.clinic_id, si.sale_id, si.product_id,
-           pr.name AS product_name, si.quantity, si.unit_price, si.subtotal
+    SELECT si.id, si.clinic_id, si.sale_id, si.product_id, si.service_id,
+           COALESCE(pr.name, svc.name) AS item_name,
+           si.quantity, si.unit_price, si.subtotal
     FROM sale_items si
-    JOIN products pr ON pr.id = si.product_id
+    LEFT JOIN products pr ON pr.id = si.product_id
+    LEFT JOIN appointment_services svc ON svc.id = si.service_id
     WHERE si.sale_id = :sale_id
     ORDER BY si.id
 """
@@ -91,28 +93,31 @@ async def create_sale(
     )
     db_user_id = user_row.scalar()
 
+    # Validate stock for product items before inserting anything
     for item in data.items:
-        stock_row = await session.execute(
-            text("SELECT stock FROM products WHERE id = :id AND deleted_at IS NULL"),
-            {"id": item.product_id},
-        )
-        product = stock_row.mappings().first()
-        if product is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Producto {item.product_id} no encontrado")
-        if Decimal(str(product["stock"])) < item.quantity:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Stock insuficiente para producto {item.product_id}")
+        if item.product_id:
+            stock_row = await session.execute(
+                text("SELECT stock FROM products WHERE id = :id AND deleted_at IS NULL"),
+                {"id": item.product_id},
+            )
+            product = stock_row.mappings().first()
+            if product is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Producto {item.product_id} no encontrado")
+            if Decimal(str(product["stock"])) < item.quantity:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Stock insuficiente para producto {item.product_id}")
 
     total = sum(item.unit_price * item.quantity for item in data.items)
 
     result = await session.execute(
         text("""
-            INSERT INTO sales (clinic_id, user_id, patient_id, owner_id, total, notes)
-            VALUES (:clinic_id, :user_id, :patient_id, :owner_id, :total, :notes)
+            INSERT INTO sales (clinic_id, user_id, appointment_id, patient_id, owner_id, total, notes)
+            VALUES (:clinic_id, :user_id, :appointment_id, :patient_id, :owner_id, :total, :notes)
             RETURNING id
         """),
         {
             "clinic_id": clinic_id,
             "user_id": str(db_user_id) if db_user_id else None,
+            "appointment_id": data.appointment_id,
             "patient_id": data.patient_id,
             "owner_id": data.owner_id,
             "total": total,
@@ -125,35 +130,41 @@ async def create_sale(
         subtotal = item.unit_price * item.quantity
         await session.execute(
             text("""
-                INSERT INTO sale_items (clinic_id, sale_id, product_id, quantity, unit_price, subtotal)
-                VALUES (:clinic_id, :sale_id, :product_id, :quantity, :unit_price, :subtotal)
+                INSERT INTO sale_items
+                    (clinic_id, sale_id, product_id, service_id, quantity, unit_price, subtotal)
+                VALUES
+                    (:clinic_id, :sale_id, :product_id, :service_id, :quantity, :unit_price, :subtotal)
             """),
             {
                 "clinic_id": clinic_id,
                 "sale_id": sale_id,
                 "product_id": item.product_id,
+                "service_id": item.service_id,
                 "quantity": item.quantity,
                 "unit_price": item.unit_price,
                 "subtotal": subtotal,
             },
         )
-        await session.execute(
-            text("UPDATE products SET stock = stock - :qty WHERE id = :id"),
-            {"qty": item.quantity, "id": item.product_id},
-        )
-        await session.execute(
-            text("""
-                INSERT INTO stock_movements (clinic_id, product_id, user_id, movement_type, quantity, reason)
-                VALUES (:clinic_id, :product_id, :user_id, 'exit', :quantity, :reason)
-            """),
-            {
-                "clinic_id": clinic_id,
-                "product_id": item.product_id,
-                "user_id": str(db_user_id) if db_user_id else None,
-                "quantity": item.quantity,
-                "reason": f"Venta #{sale_id[:8]}",
-            },
-        )
+        if item.product_id:
+            await session.execute(
+                text("UPDATE products SET stock = stock - :qty WHERE id = :id"),
+                {"qty": item.quantity, "id": item.product_id},
+            )
+            await session.execute(
+                text("""
+                    INSERT INTO stock_movements
+                        (clinic_id, product_id, user_id, movement_type, quantity, reason)
+                    VALUES
+                        (:clinic_id, :product_id, :user_id, 'exit', :quantity, :reason)
+                """),
+                {
+                    "clinic_id": clinic_id,
+                    "product_id": item.product_id,
+                    "user_id": str(db_user_id) if db_user_id else None,
+                    "quantity": item.quantity,
+                    "reason": f"Venta #{sale_id[:8]}",
+                },
+            )
 
     await session.commit()
     return await _fetch_sale(sale_id, session)

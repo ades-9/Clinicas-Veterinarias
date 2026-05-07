@@ -8,12 +8,12 @@ import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
-import type { Product, ProductCategory, StockMovement } from "@/types"
+import type { Product, ProductCategory, ProductUnit, StockMovement } from "@/types"
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function fmt(n: number) {
-  return new Intl.NumberFormat("es", { style: "currency", currency: "COP", minimumFractionDigits: 0 }).format(n)
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n)
 }
 
 // ── forms ─────────────────────────────────────────────────────────────────────
@@ -68,6 +68,12 @@ export function ProductsPage() {
   const { data: categories = [] } = useQuery({
     queryKey: ["product-categories"],
     queryFn: () => api.get<ProductCategory[]>("/product-categories"),
+  })
+
+  const { data: units = [] } = useQuery({
+    queryKey: ["catalog-units"],
+    queryFn: () => api.get<ProductUnit[]>("/catalog/product-units"),
+    staleTime: Infinity,
   })
 
   const { data: products = [], isLoading } = useQuery({
@@ -362,7 +368,10 @@ export function ProductsPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="p-unit">Unidad</Label>
-              <Input id="p-unit" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
+              <Select id="p-unit" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}>
+                <option value="">Seleccionar...</option>
+                {units.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="p-price">Precio *</Label>

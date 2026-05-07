@@ -11,8 +11,10 @@ class PatientRead(BaseModel):
     owner_id: UUID
     owner_name: str
     name: str
-    species: str | None
-    breed: str | None
+    species_id: UUID | None
+    species_name: str | None
+    breed_id: UUID | None
+    breed_name: str | None
     birth_date: date | None
     weight: Decimal | None
     vaccination_code: str | None
@@ -23,8 +25,8 @@ class PatientRead(BaseModel):
 class PatientCreate(BaseModel):
     owner_id: str
     name: str
-    species: str | None = None
-    breed: str | None = None
+    species_id: str | None = None
+    breed_id: str | None = None
     birth_date: date | None = None
     weight: Decimal | None = None
     vaccination_code: str | None = None
@@ -34,8 +36,8 @@ class PatientCreate(BaseModel):
 class PatientUpdate(BaseModel):
     owner_id: str | None = None
     name: str | None = None
-    species: str | None = None
-    breed: str | None = None
+    species_id: str | None = None
+    breed_id: str | None = None
     birth_date: date | None = None
     weight: Decimal | None = None
     vaccination_code: str | None = None

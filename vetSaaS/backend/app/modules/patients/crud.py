@@ -7,10 +7,13 @@ from app.modules.patients.schemas import PatientCreate, PatientRead, PatientUpda
 
 _PATIENT_SELECT = """
     SELECT p.id, p.clinic_id, p.owner_id, o.full_name AS owner_name,
-           p.name, p.species, p.breed, p.birth_date, p.weight,
-           p.vaccination_code, p.notes, p.created_at
+           p.name, p.species_id, sp.name AS species_name,
+           p.breed_id, br.name AS breed_name,
+           p.birth_date, p.weight, p.vaccination_code, p.notes, p.created_at
     FROM patients p
     JOIN owners o ON o.id = p.owner_id
+    LEFT JOIN species sp ON sp.id = p.species_id
+    LEFT JOIN breeds br ON br.id = p.breed_id
     WHERE p.deleted_at IS NULL
 """
 
@@ -67,9 +70,11 @@ async def create_patient(clinic_id: str, data: PatientCreate, session: AsyncSess
     result = await session.execute(
         text("""
             INSERT INTO patients
-                (clinic_id, owner_id, name, species, breed, birth_date, weight, vaccination_code, notes)
+                (clinic_id, owner_id, name, species_id, breed_id,
+                 birth_date, weight, vaccination_code, notes)
             VALUES
-                (:clinic_id, :owner_id, :name, :species, :breed, :birth_date, :weight, :vaccination_code, :notes)
+                (:clinic_id, :owner_id, :name, :species_id, :breed_id,
+                 :birth_date, :weight, :vaccination_code, :notes)
             RETURNING id
         """),
         {"clinic_id": clinic_id, **data.model_dump()},
@@ -79,7 +84,9 @@ async def create_patient(clinic_id: str, data: PatientCreate, session: AsyncSess
     return await get_patient(patient_id, clinic_id, session)
 
 
-async def update_patient(patient_id: str, clinic_id: str, data: PatientUpdate, session: AsyncSession) -> PatientRead:
+async def update_patient(
+    patient_id: str, clinic_id: str, data: PatientUpdate, session: AsyncSession
+) -> PatientRead:
     await set_rls_context(session, clinic_id)
 
     fields = data.model_dump(exclude_unset=True)
