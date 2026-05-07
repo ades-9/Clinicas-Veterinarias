@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_clerk_user_id
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database import get_db, set_rls_context
 
 router = APIRouter(tags=["onboarding"])
 
@@ -48,6 +48,7 @@ async def register_clinic(
         {"name": data.clinic_name, "email": data.email},
     )
     clinic_id = str(clinic_row.scalar_one())
+    await set_rls_context(session, clinic_id)
 
     role_row = await session.execute(
         text("INSERT INTO roles (clinic_id, name) VALUES (:clinic_id, 'admin') RETURNING id"),

@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"from app.main import app; print\\('OK'\\)\")",
+      "Bash(pip install *)",
+      "Bash(python -c ' *)",
+      "Bash(dir \"C:/Users/aescalante/Desktop/PROYECTOS/PERSONALES/Clinicas Veterinarias/vetSaaS/frontend\")",
+      "Bash(npm install *)",
+      "Bash(npx tailwindcss *)"
+    ]
+  }
+}

@@ -14,9 +14,14 @@ _jwks_cache: dict | None = None
 async def _get_jwks() -> dict:
     global _jwks_cache
     if _jwks_cache is None:
+        url = settings.resolved_jwks_url
         async with httpx.AsyncClient() as client:
-            resp = await client.get(settings.clerk_jwks_url, timeout=10)
-            resp.raise_for_status()
+            resp = await client.get(url, timeout=10)
+            if not resp.is_success or not resp.content:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"No se pudo obtener JWKS de Clerk (status={resp.status_code}, url={url})",
+                )
             _jwks_cache = resp.json()
     return _jwks_cache
 

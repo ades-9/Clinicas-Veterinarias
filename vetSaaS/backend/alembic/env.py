@@ -1,18 +1,25 @@
 import os
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool
+
 from alembic import context
-from app.core.database import Base  # importa todos tus modelos aquí
+from dotenv import load_dotenv
+from sqlalchemy import engine_from_config, pool
+from sqlalchemy.orm import DeclarativeBase
+
+load_dotenv()
 
 config = context.config
-
-# Lee la variable de entorno directamente
 config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"].replace("+asyncpg", ""))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = Base.metadata
+
+class _Base(DeclarativeBase):
+    pass
+
+
+target_metadata = _Base.metadata
 
 
 def run_migrations_offline():
