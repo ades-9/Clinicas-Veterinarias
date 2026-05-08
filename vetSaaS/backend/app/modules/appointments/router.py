@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
 from fastapi import Query
@@ -68,8 +66,8 @@ async def list_appointments(
     service_type: str | None = Query(default=None),
     patient_id: str | None = Query(default=None),
     assigned_user_id: str | None = Query(default=None),
-    date_from: datetime | None = Query(default=None),
-    date_to: datetime | None = Query(default=None),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     user: CurrentUser = Depends(get_current_user),
@@ -93,8 +91,8 @@ async def list_appointments(
         service_type=service_type,
         patient_id=patient_id,
         assigned_user_id=assigned_user_id,
-        date_from=str(date_from) if date_from else None,
-        date_to=str(date_to) if date_to else None,
+        date_from=date_from,
+        date_to=date_to,
         only_own_clerk_id=only_own,
         limit=limit,
         offset=offset,

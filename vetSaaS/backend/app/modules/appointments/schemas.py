@@ -1,10 +1,10 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
 
-ServiceType = Literal["veterinary", "grooming"]
+ServiceType = Literal["veterinary", "grooming", "promotional"]
 AppointmentStatus = Literal["pending", "confirmed", "attended", "cancelled"]
 
 
@@ -15,6 +15,10 @@ class AppointmentServiceRead(BaseModel):
     service_type: ServiceType
     duration_minutes: int
     price: float
+    promo_price: float | None
+    promo_start: date | None
+    promo_end: date | None
+    effective_price: float
     created_at: datetime
 
 
@@ -23,6 +27,9 @@ class AppointmentServiceCreate(BaseModel):
     service_type: ServiceType
     duration_minutes: int = 30
     price: float = 0.0
+    promo_price: float | None = None
+    promo_start: date | None = None
+    promo_end: date | None = None
 
 
 class AppointmentServiceUpdate(BaseModel):
@@ -30,6 +37,9 @@ class AppointmentServiceUpdate(BaseModel):
     service_type: ServiceType | None = None
     duration_minutes: int | None = None
     price: float | None = None
+    promo_price: float | None = None
+    promo_start: date | None = None
+    promo_end: date | None = None
 
 
 class AppointmentRead(BaseModel):

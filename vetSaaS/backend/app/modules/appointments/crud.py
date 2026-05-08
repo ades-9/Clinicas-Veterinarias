@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +14,16 @@ from app.modules.appointments.schemas import (
 )
 
 _SERVICE_SELECT = """
-    SELECT id, clinic_id, name, service_type, duration_minutes, price, created_at
+    SELECT id, clinic_id, name, service_type, duration_minutes, price,
+           promo_price, promo_start, promo_end,
+           CASE
+               WHEN promo_price IS NOT NULL
+                AND promo_start IS NOT NULL AND promo_end IS NOT NULL
+                AND promo_start <= CURRENT_DATE AND promo_end >= CURRENT_DATE
+               THEN promo_price
+               ELSE price
+           END AS effective_price,
+           created_at
     FROM appointment_services
     WHERE deleted_at IS NULL
 """
@@ -132,11 +142,17 @@ async def list_appointments(
         filters += " AND a.assigned_user_id = :assigned_user_id"
         params["assigned_user_id"] = assigned_user_id
     if date_from:
+        try:
+            params["date_from"] = datetime.fromisoformat(date_from)
+        except ValueError:
+            params["date_from"] = date_from
         filters += " AND a.scheduled_at >= :date_from"
-        params["date_from"] = date_from
     if date_to:
+        try:
+            params["date_to"] = datetime.fromisoformat(date_to)
+        except ValueError:
+            params["date_to"] = date_to
         filters += " AND a.scheduled_at <= :date_to"
-        params["date_to"] = date_to
     if only_own_clerk_id:
         filters += (
             " AND a.assigned_user_id = ("

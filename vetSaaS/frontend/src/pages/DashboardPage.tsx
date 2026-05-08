@@ -10,7 +10,8 @@ import type { Appointment, AppointmentStatus } from "@/types"
 // ── Helpers de fecha ──────────────────────────────────────────────────────────
 
 function toISOLocal(date: Date) {
-  return date.toISOString().slice(0, 19)
+  const p = (n: number) => String(n).padStart(2, "0")
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}`
 }
 
 function todayRange() {
@@ -99,23 +100,24 @@ export function DashboardPage() {
 
   const today = todayRange()
   const upcoming = upcomingRange()
+  const todayStr = new Date().toLocaleDateString("en-CA")
 
   const { data: todayAppts = [], isLoading: loadingToday } = useQuery({
-    queryKey: ["appointments-today"],
+    queryKey: ["appointments-today", todayStr],
     queryFn: () =>
       api.get<Appointment[]>(
-        `/appointments?date_from=${today.from}&date_to=${today.to}&limit=100`
+        `/appointments?date_from=${encodeURIComponent(today.from)}&date_to=${encodeURIComponent(today.to)}&limit=100`
       ),
-    staleTime: 60_000,
+    staleTime: 0,
   })
 
   const { data: upcomingAppts = [], isLoading: loadingUpcoming } = useQuery({
-    queryKey: ["appointments-upcoming"],
+    queryKey: ["appointments-upcoming", todayStr],
     queryFn: () =>
       api.get<Appointment[]>(
-        `/appointments?date_from=${upcoming.from}&date_to=${upcoming.to}&limit=100`
+        `/appointments?date_from=${encodeURIComponent(upcoming.from)}&date_to=${encodeURIComponent(upcoming.to)}&limit=100`
       ),
-    staleTime: 60_000,
+    staleTime: 0,
   })
 
   const pending = todayAppts.filter((a) => a.status === "pending").length

@@ -329,7 +329,7 @@ function PatientHistoryView({ patientId, onBack, onNewRecord }: PatientHistoryVi
           <div className="flex-1">
             <h2 className="text-xl font-bold">{patient.name}</h2>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {[patient.species, patient.breed].filter(Boolean).join(" · ")}
+              {[patient.species_name, patient.breed_name].filter(Boolean).join(" · ")}
               {patient.owner_name && ` · Propietario: ${patient.owner_name}`}
             </p>
           </div>
@@ -449,7 +449,16 @@ function PatientFilter({ onSelect }: PatientFilterProps) {
   )
 }
 
-// ── Vista de tabla (todos los registros) ──────────────────────────────────────
+// ── Vista de tabla (pacientes únicos con última consulta) ─────────────────────
+
+interface PatientSummary {
+  patient_id: string
+  patient_name: string
+  last_visit: string
+  consultation_count: number
+  last_reason: string
+  last_vet: string
+}
 
 interface AllRecordsViewProps {
   onSelectPatient: (id: string) => void
@@ -461,15 +470,40 @@ function AllRecordsView({ onSelectPatient, onNewRecord }: AllRecordsViewProps) {
 
   const { data: records = [], isLoading } = useQuery({
     queryKey: ["medical-records", "all"],
-    queryFn: () => api.get<MedicalRecord[]>("/medical-records?limit=100"),
+    queryFn: () => api.get<MedicalRecord[]>("/medical-records?limit=500"),
+    staleTime: 0,
   })
+
+  // Group by patient_id — one row per patient, sorted by most recent visit
+  const patientSummaries: PatientSummary[] = Object.values(
+    records.reduce((acc, r) => {
+      if (!acc[r.patient_id]) {
+        acc[r.patient_id] = {
+          patient_id: r.patient_id,
+          patient_name: r.patient_name,
+          last_visit: r.visit_date,
+          consultation_count: 1,
+          last_reason: r.reason,
+          last_vet: r.veterinarian_name,
+        }
+      } else {
+        acc[r.patient_id].consultation_count += 1
+        if (new Date(r.visit_date) > new Date(acc[r.patient_id].last_visit)) {
+          acc[r.patient_id].last_visit = r.visit_date
+          acc[r.patient_id].last_reason = r.reason
+          acc[r.patient_id].last_vet = r.veterinarian_name
+        }
+      }
+      return acc
+    }, {} as Record<string, PatientSummary>)
+  ).sort((a, b) => new Date(b.last_visit).getTime() - new Date(a.last_visit).getTime())
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Historia Clínica</h1>
-          <p className="text-sm text-muted-foreground">Registros médicos de pacientes</p>
+          <p className="text-sm text-muted-foreground">Expedientes de pacientes</p>
         </div>
         <Button onClick={onNewRecord}>
           <Plus className="h-4 w-4" />
@@ -483,11 +517,11 @@ function AllRecordsView({ onSelectPatient, onNewRecord }: AllRecordsViewProps) {
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/50">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Fecha</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Paciente</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Motivo</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Diagnóstico</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Última consulta</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Último motivo</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Veterinario</th>
+              <th className="text-center px-4 py-3 font-medium text-muted-foreground">Consultas</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -498,43 +532,36 @@ function AllRecordsView({ onSelectPatient, onNewRecord }: AllRecordsViewProps) {
                   Cargando...
                 </td>
               </tr>
-            ) : records.length === 0 ? (
+            ) : patientSummaries.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
                   No hay registros médicos
                 </td>
               </tr>
             ) : (
-              records.map((record) => (
+              patientSummaries.map((ps) => (
                 <tr
-                  key={record.id}
-                  className="border-b last:border-0 hover:bg-muted/30 transition-colors"
+                  key={ps.patient_id}
+                  className="border-b last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                  onClick={() => onSelectPatient(ps.patient_id)}
                 >
+                  <td className="px-4 py-3 font-medium">{ps.patient_name}</td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {new Date(record.visit_date).toLocaleDateString("es")}
+                    {new Date(ps.last_visit).toLocaleDateString("es")}
                   </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => onSelectPatient(record.patient_id)}
-                      className="font-medium hover:text-primary hover:underline transition-colors"
-                    >
-                      {record.patient_name}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3">{record.reason}</td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {record.diagnosis
-                      ? <span className="line-clamp-1">{record.diagnosis}</span>
-                      : "—"}
+                    <span className="line-clamp-1">{ps.last_reason}</span>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">{record.veterinarian_name}</td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => onSelectPatient(record.patient_id)}
-                      className="text-xs text-primary hover:underline"
-                    >
-                      Ver expediente
-                    </button>
+                  <td className="px-4 py-3 text-muted-foreground">{ps.last_vet}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="inline-flex items-center justify-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+                      {ps.consultation_count}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <span className="text-xs text-primary hover:underline">
+                      Ver expediente →
+                    </span>
                   </td>
                 </tr>
               ))

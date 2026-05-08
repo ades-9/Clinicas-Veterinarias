@@ -55,7 +55,7 @@ export interface Patient {
   created_at: string
 }
 
-export type ServiceType = "veterinary" | "grooming"
+export type ServiceType = "veterinary" | "grooming" | "promotional"
 export type AppointmentStatus = "pending" | "confirmed" | "attended" | "cancelled"
 
 export interface AppointmentService {
@@ -65,6 +65,10 @@ export interface AppointmentService {
   service_type: ServiceType
   duration_minutes: number
   price: number
+  promo_price: number | null
+  promo_start: string | null
+  promo_end: string | null
+  effective_price: number
   created_at: string
 }
 

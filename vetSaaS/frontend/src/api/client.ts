@@ -17,8 +17,16 @@ async function request<T>(
     },
   })
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(error.detail ?? "Error inesperado")
+    const rawBody = await res.text().catch(() => "")
+    console.error(`[API ERROR] ${options.method ?? "GET"} ${path} → ${res.status} ${res.statusText}\nBody: ${rawBody}`)
+    let detail: string
+    try {
+      const parsed = JSON.parse(rawBody)
+      detail = parsed.detail ?? "Error inesperado"
+    } catch {
+      detail = res.statusText
+    }
+    throw new Error(detail)
   }
   if (res.status === 204) return undefined as T
   return res.json()

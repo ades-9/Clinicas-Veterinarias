@@ -182,16 +182,23 @@ function ClinicSection() {
 
 interface ServiceForm {
   name: string
-  service_type: "veterinary" | "grooming" | ""
+  service_type: "veterinary" | "grooming" | "promotional" | ""
   duration_minutes: string
   price: string
+  promo_price: string
+  promo_start: string
+  promo_end: string
 }
 
-const EMPTY_SERVICE: ServiceForm = { name: "", service_type: "", duration_minutes: "30", price: "0" }
+const EMPTY_SERVICE: ServiceForm = {
+  name: "", service_type: "", duration_minutes: "30", price: "0",
+  promo_price: "", promo_start: "", promo_end: "",
+}
 
-const SERVICE_TYPE_LABELS: Record<"veterinary" | "grooming", string> = {
+const SERVICE_TYPE_LABELS: Record<"veterinary" | "grooming" | "promotional", string> = {
   veterinary: "Veterinaria",
   grooming: "Estética",
+  promotional: "Promoción",
 }
 
 function ServicesSection() {
@@ -251,6 +258,9 @@ function ServicesSection() {
       service_type: s.service_type,
       duration_minutes: s.duration_minutes.toString(),
       price: s.price.toString(),
+      promo_price: s.promo_price?.toString() ?? "",
+      promo_start: s.promo_start ?? "",
+      promo_end: s.promo_end ?? "",
     })
     setError("")
     setFormOpen(true)
@@ -271,6 +281,9 @@ function ServicesSection() {
       service_type: form.service_type,
       duration_minutes: parseInt(form.duration_minutes, 10),
       price: parseFloat(form.price) || 0,
+      promo_price: form.promo_price ? parseFloat(form.promo_price) : null,
+      promo_start: form.promo_start || null,
+      promo_end: form.promo_end || null,
     }
     if (editing) {
       updateMutation.mutate({ id: editing.id, data: payload })
@@ -310,24 +323,50 @@ function ServicesSection() {
               <th className="text-left py-2 font-medium text-muted-foreground">Tipo</th>
               <th className="text-left py-2 font-medium text-muted-foreground">Duración</th>
               <th className="text-right py-2 font-medium text-muted-foreground">Precio</th>
+              <th className="text-right py-2 font-medium text-muted-foreground">Promoción</th>
               <th className="py-2" />
             </tr>
           </thead>
           <tbody>
-            {services.map((s) => (
+            {services.map((s) => {
+              const today = new Date().toISOString().slice(0, 10)
+              const promoActive =
+                s.promo_price != null &&
+                s.promo_start != null && s.promo_end != null &&
+                s.promo_start <= today && s.promo_end >= today
+              return (
               <tr
                 key={s.id}
                 className="border-b last:border-0 hover:bg-muted/30 transition-colors"
               >
                 <td className="py-3 font-medium">{s.name}</td>
                 <td className="py-3">
-                  <Badge variant={s.service_type === "veterinary" ? "default" : "secondary"}>
+                  <Badge variant={s.service_type === "veterinary" ? "default" : s.service_type === "promotional" ? "warning" : "secondary"}>
                     {SERVICE_TYPE_LABELS[s.service_type]}
                   </Badge>
                 </td>
                 <td className="py-3 text-muted-foreground">{s.duration_minutes} min</td>
                 <td className="py-3 text-right font-medium">
                   {new Intl.NumberFormat("es", { style: "currency", currency: "USD" }).format(s.price)}
+                </td>
+                <td className="py-3 text-right">
+                  {s.promo_price != null ? (
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className={`text-xs font-medium ${promoActive ? "text-green-600" : "text-muted-foreground"}`}>
+                        {new Intl.NumberFormat("es", { style: "currency", currency: "USD" }).format(s.promo_price)}
+                      </span>
+                      {promoActive && (
+                        <Badge variant="success" className="text-xs">PROMO</Badge>
+                      )}
+                      {!promoActive && s.promo_start && s.promo_end && (
+                        <span className="text-xs text-muted-foreground">
+                          {s.promo_start} → {s.promo_end}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground text-xs">—</span>
+                  )}
                 </td>
                 <td className="py-3">
                   <div className="flex justify-end gap-1">
@@ -348,7 +387,7 @@ function ServicesSection() {
                   </div>
                 </td>
               </tr>
-            ))}
+            )})}
           </tbody>
         </table>
       )}
@@ -384,6 +423,7 @@ function ServicesSection() {
               <option value="">Seleccionar tipo...</option>
               <option value="veterinary">Veterinaria</option>
               <option value="grooming">Estética</option>
+              <option value="promotional">Promoción (incluye vet + estética)</option>
             </Select>
           </div>
           <div className="space-y-1.5">
@@ -408,6 +448,40 @@ function ServicesSection() {
               value={form.price}
               onChange={(e) => setForm({ ...form, price: e.target.value })}
             />
+          </div>
+          <div className="border-t pt-3 space-y-3">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Promoción temporal (opcional)</p>
+            <div className="space-y-1.5">
+              <Label htmlFor="svc_promo_price">Precio promocional (USD)</Label>
+              <Input
+                id="svc_promo_price"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.promo_price}
+                onChange={(e) => setForm({ ...form, promo_price: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="svc_promo_start">Desde</Label>
+                <Input
+                  id="svc_promo_start"
+                  type="date"
+                  value={form.promo_start}
+                  onChange={(e) => setForm({ ...form, promo_start: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="svc_promo_end">Hasta</Label>
+                <Input
+                  id="svc_promo_end"
+                  type="date"
+                  value={form.promo_end}
+                  onChange={(e) => setForm({ ...form, promo_end: e.target.value })}
+                />
+              </div>
+            </div>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">
