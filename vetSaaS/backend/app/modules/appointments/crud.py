@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -111,6 +111,67 @@ async def delete_service(service_id: str, clinic_id: str, session: AsyncSession)
 
 # ---- appointments ----
 
+async def _detect_conflict(
+    session: AsyncSession,
+    service_id: str,
+    assigned_user_id: str,
+    scheduled_at: datetime,
+    appointment_id_to_exclude: str | None = None,
+) -> dict | None:
+    """Detecta solapamiento con otra cita activa cuando coincide servicio o profesional.
+    Devuelve dict con datos de la cita conflictiva o None."""
+    duration_row = await session.execute(
+        text("SELECT duration_minutes FROM appointment_services WHERE id = :id AND deleted_at IS NULL"),
+        {"id": service_id},
+    )
+    duration = duration_row.scalar()
+    if duration is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servicio no encontrado")
+
+    end_time = scheduled_at + timedelta(minutes=duration)
+    sql = """
+        SELECT a.id, a.scheduled_at, s.duration_minutes,
+               s.name AS service_name, u.full_name AS assigned_name,
+               (a.service_id = :service_id) AS service_match,
+               (a.assigned_user_id = :assigned_user_id) AS assignee_match
+        FROM appointments a
+        JOIN appointment_services s ON s.id = a.service_id
+        JOIN users u ON u.id = a.assigned_user_id
+        WHERE a.deleted_at IS NULL
+          AND a.status != 'cancelled'
+          AND (a.service_id = :service_id OR a.assigned_user_id = :assigned_user_id)
+          AND a.scheduled_at < :end_time
+          AND a.scheduled_at + make_interval(mins => s.duration_minutes) > :scheduled_at
+    """
+    params: dict = {
+        "service_id": service_id,
+        "assigned_user_id": assigned_user_id,
+        "scheduled_at": scheduled_at,
+        "end_time": end_time,
+    }
+    if appointment_id_to_exclude:
+        sql += " AND a.id != :exclude_id"
+        params["exclude_id"] = appointment_id_to_exclude
+    sql += " LIMIT 1"
+
+    result = await session.execute(text(sql), params)
+    row = result.mappings().first()
+    return dict(row) if row else None
+
+
+def _format_conflict_detail(conflict: dict) -> str:
+    reasons = []
+    if conflict["service_match"]:
+        reasons.append("mismo servicio")
+    if conflict["assignee_match"]:
+        reasons.append("mismo profesional")
+    when = conflict["scheduled_at"].strftime("%d/%m %H:%M")
+    return (
+        f"Conflicto de horario ({', '.join(reasons)}): "
+        f"{conflict['service_name']} con {conflict['assigned_name']} a las {when}"
+    )
+
+
 async def list_appointments(
     clinic_id: str,
     session: AsyncSession,
@@ -199,6 +260,18 @@ async def create_appointment(clinic_id: str, data: AppointmentCreate, session: A
     )
     service_type = svc_row.scalar_one()
 
+    conflict = await _detect_conflict(
+        session,
+        service_id=data.service_id,
+        assigned_user_id=data.assigned_user_id,
+        scheduled_at=data.scheduled_at,
+    )
+    if conflict:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_format_conflict_detail(conflict),
+        )
+
     result = await session.execute(
         text("""
             INSERT INTO appointments
@@ -241,6 +314,25 @@ async def update_appointment(
         )
         if check.scalar() is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+
+    new_status = fields.get("status")
+    affects_schedule = (
+        "service_id" in fields or "assigned_user_id" in fields or "scheduled_at" in fields
+    )
+    if affects_schedule and new_status != "cancelled":
+        current = await get_appointment(appointment_id, clinic_id, session)
+        conflict = await _detect_conflict(
+            session,
+            service_id=fields.get("service_id", str(current.service_id)),
+            assigned_user_id=fields.get("assigned_user_id", str(current.assigned_user_id)),
+            scheduled_at=fields.get("scheduled_at", current.scheduled_at),
+            appointment_id_to_exclude=appointment_id,
+        )
+        if conflict:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=_format_conflict_detail(conflict),
+            )
 
     set_clause = ", ".join(f"{k} = :{k}" for k in fields)
     fields["id"] = appointment_id

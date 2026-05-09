@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { CalendarDays, List, Pencil, PlayCircle, Plus, XCircle } from "lucide-react"
-import { useState } from "react"
+import { CalendarDays, List, Pencil, PlayCircle, Plus, User as UserIcon, PawPrint, Stethoscope, XCircle } from "lucide-react"
+import { useMemo, useState } from "react"
 import { useApiClient } from "@/api/client"
 import { AppointmentCalendar, getWeekStart, addDays } from "@/components/AppointmentCalendar"
+import { AssigneeCombobox } from "@/components/AssigneeCombobox"
 import { ConsultationModal } from "@/components/ConsultationModal"
-import { PatientSearch } from "@/components/PatientSearch"
+import { DayTimeline } from "@/components/DayTimeline"
+import { OwnerCombobox } from "@/components/OwnerCombobox"
+import { PatientCombobox } from "@/components/PatientCombobox"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
@@ -12,7 +15,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import type { Appointment, AppointmentService, AppointmentStatus, Patient, User } from "@/types"
+import type {
+  Appointment,
+  AppointmentService,
+  AppointmentStatus,
+  Owner,
+  Patient,
+  User,
+} from "@/types"
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -42,25 +52,33 @@ function toISOLocal(date: Date) {
 // ── Form types ────────────────────────────────────────────────────────────────
 
 interface ApptForm {
-  patient_id: string
-  owner_id: string
-  patient_display: string
-  assigned_user_id: string
   service_id: string
-  scheduled_at: string
+  date: string         // YYYY-MM-DD
+  time: string         // HH:MM
   status: AppointmentStatus | ""
   notes: string
 }
 
 const EMPTY: ApptForm = {
-  patient_id: "",
-  owner_id: "",
-  patient_display: "",
-  assigned_user_id: "",
   service_id: "",
-  scheduled_at: "",
+  date: "",
+  time: "",
   status: "",
   notes: "",
+}
+
+function computeEndTime(timeStr: string, durationMin: number): string {
+  if (!timeStr || !durationMin) return ""
+  const [h, m] = timeStr.split(":").map(Number)
+  const total = h * 60 + m + durationMin
+  return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`
+}
+
+function shiftDate(yyyymmdd: string, days: number): string {
+  if (!yyyymmdd) return ""
+  const d = new Date(yyyymmdd + "T00:00:00")
+  d.setDate(d.getDate() + days)
+  return d.toLocaleDateString("en-CA")
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -75,7 +93,10 @@ export function AppointmentsPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null)
   const [editing, setEditing] = useState<Appointment | null>(null)
+  const [selectedOwner, setSelectedOwner] = useState<Owner | null>(null)
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
+  const [selectedAssignee, setSelectedAssignee] = useState<User | null>(null)
+  const [showNotes, setShowNotes] = useState(false)
   const [form, setForm] = useState<ApptForm>(EMPTY)
   const [error, setError] = useState("")
   const [consultationAppt, setConsultationAppt] = useState<Appointment | null>(null)
@@ -109,6 +130,7 @@ export function AppointmentsPage() {
     queryKey: ["users"],
     queryFn: () => api.get<User[]>("/users"),
     enabled: formOpen,
+    staleTime: 60_000,
   })
 
   const { data: services = [] } = useQuery({
@@ -117,20 +139,48 @@ export function AppointmentsPage() {
     enabled: formOpen,
   })
 
+  // Citas del día seleccionado en el form (para el timeline)
+  const formDate = (() => {
+    if (form.date) return form.date
+    if (editing) return new Date(editing.scheduled_at).toLocaleDateString("en-CA")
+    return ""
+  })()
+
+  const { data: dayAppts = [] } = useQuery({
+    queryKey: ["appointments-day", formDate],
+    queryFn: () =>
+      api.get<Appointment[]>(
+        `/appointments?date_from=${formDate}T00:00:00&date_to=${formDate}T23:59:59&limit=200`
+      ),
+    enabled: formOpen && !!formDate,
+    staleTime: 30_000,
+  })
+
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["appointments"] })
     queryClient.invalidateQueries({ queryKey: ["appointments-today"] })
     queryClient.invalidateQueries({ queryKey: ["appointments-upcoming"] })
     queryClient.invalidateQueries({ queryKey: ["appointments-calendar"] })
+    queryClient.invalidateQueries({ queryKey: ["appointments-day"] })
   }
+
+  const selectedService = useMemo(
+    () => services.find((s) => s.id === form.service_id) ?? null,
+    [services, form.service_id]
+  )
+  const duration = selectedService?.duration_minutes ?? 0
+  const endTime = computeEndTime(form.time, duration)
+  const newStartISO = form.date && form.time ? `${form.date}T${form.time}:00` : null
 
   const createMutation = useMutation({
     mutationFn: (data: object) => api.post<Appointment>("/appointments", data),
     onSuccess: () => {
       invalidateAll()
-      setJustCreated({ patientName: form.patient_display || "el paciente" })
-      // Keep form open but reset service/user/notes to allow quick second booking
-      setForm((f) => ({ ...f, service_id: "", assigned_user_id: "", notes: "", status: "" }))
+      setJustCreated({ patientName: selectedPatient?.name ?? "el paciente" })
+      // Keep owner+patient+date for quick second booking; reset service/time/assignee/notes
+      setForm((f) => ({ ...f, service_id: "", time: "", notes: "", status: "" }))
+      setSelectedAssignee(null)
+      setShowNotes(false)
       setError("")
     },
     onError: (e: Error) => setError(e.message),
@@ -151,8 +201,11 @@ export function AppointmentsPage() {
 
   function openCreate() {
     setEditing(null)
+    setSelectedOwner(null)
     setSelectedPatient(null)
-    setForm(EMPTY)
+    setSelectedAssignee(null)
+    setShowNotes(false)
+    setForm({ ...EMPTY, date: new Date().toLocaleDateString("en-CA") })
     setError("")
     setJustCreated(null)
     setFormOpen(true)
@@ -160,15 +213,16 @@ export function AppointmentsPage() {
 
   function openEdit(appt: Appointment) {
     setEditing(appt)
+    setSelectedOwner(null) // edit no usa combobox
     setSelectedPatient(null)
+    setSelectedAssignee(null)
+    setShowNotes(!!appt.notes)
     setJustCreated(null)
+    const d = new Date(appt.scheduled_at)
     setForm({
-      patient_id: appt.patient_id,
-      owner_id: appt.owner_id,
-      patient_display: appt.patient_name,
-      assigned_user_id: appt.assigned_user_id,
       service_id: appt.service_id,
-      scheduled_at: appt.scheduled_at.slice(0, 16),
+      date: d.toLocaleDateString("en-CA"),
+      time: `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`,
       status: appt.status,
       notes: appt.notes ?? "",
     })
@@ -179,47 +233,53 @@ export function AppointmentsPage() {
   function closeForm() {
     setFormOpen(false)
     setEditing(null)
+    setSelectedOwner(null)
     setSelectedPatient(null)
+    setSelectedAssignee(null)
+    setShowNotes(false)
     setForm(EMPTY)
     setError("")
     setJustCreated(null)
   }
 
-  function handlePatientChange(patient: Patient | null) {
-    setSelectedPatient(patient)
-    setForm((f) => ({
-      ...f,
-      patient_id: patient?.id ?? "",
-      owner_id: patient?.owner_id ?? "",
-      patient_display: patient?.name ?? "",
-    }))
+  function handleOwnerChange(owner: Owner | null) {
+    setSelectedOwner(owner)
+    // si cambia el owner, el patient previamente seleccionado puede no ser de ese owner
+    setSelectedPatient(null)
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
-    if (!editing && !form.patient_id) {
-      setError("Selecciona un paciente")
-      return
-    }
+    const scheduledAt = form.date && form.time ? `${form.date}T${form.time}:00` : ""
+    if (!form.service_id) { setError("Selecciona un servicio"); return }
+    if (!scheduledAt) { setError("Selecciona fecha y hora"); return }
+
     if (editing) {
+      if (!selectedAssignee && !editing.assigned_user_id) {
+        setError("Selecciona un profesional")
+        return
+      }
       updateMutation.mutate({
         id: editing.id,
         data: {
-          assigned_user_id: form.assigned_user_id,
+          assigned_user_id: selectedAssignee?.id ?? editing.assigned_user_id,
           service_id: form.service_id,
-          scheduled_at: form.scheduled_at,
+          scheduled_at: scheduledAt,
           status: form.status || undefined,
           notes: form.notes || null,
         },
       })
     } else {
+      if (!selectedOwner) { setError("Selecciona un propietario"); return }
+      if (!selectedPatient) { setError("Selecciona un paciente"); return }
+      if (!selectedAssignee) { setError("Selecciona un profesional"); return }
       createMutation.mutate({
-        patient_id: form.patient_id,
-        owner_id: form.owner_id,
-        assigned_user_id: form.assigned_user_id,
+        patient_id: selectedPatient.id,
+        owner_id: selectedOwner.id,
+        assigned_user_id: selectedAssignee.id,
         service_id: form.service_id,
-        scheduled_at: form.scheduled_at,
+        scheduled_at: scheduledAt,
         notes: form.notes || null,
       })
     }
@@ -390,9 +450,9 @@ export function AppointmentsPage() {
         open={formOpen}
         onClose={closeForm}
         title={editing ? "Editar cita" : "Nueva cita"}
-        className="max-w-lg"
+        className={editing ? "max-w-lg" : "max-w-5xl"}
       >
-        {/* Success banner — "agendar otro servicio" */}
+        {/* Banner cuando se acaba de crear */}
         {justCreated && (
           <div className="rounded-md bg-green-50 border border-green-200 px-4 py-3 mb-4 flex items-center justify-between gap-3">
             <p className="text-sm text-green-800 font-medium">
@@ -409,111 +469,257 @@ export function AppointmentsPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit}>
           {editing ? (
-            <div className="rounded-md bg-muted/50 px-3 py-2 text-sm">
-              <span className="text-muted-foreground">Paciente: </span>
-              <span className="font-medium">{editing.patient_name}</span>
-            </div>
-          ) : justCreated ? (
-            <div className="rounded-md bg-muted/50 px-3 py-2 text-sm">
-              <span className="text-muted-foreground">Paciente: </span>
-              <span className="font-medium">{justCreated.patientName}</span>
-              <span className="text-xs text-muted-foreground ml-2">(mismo horario)</span>
+            // ── EDIT MODE: form simple (no se puede cambiar paciente/owner) ─────
+            <div className="space-y-4">
+              <div className="rounded-md bg-muted/50 px-3 py-2 text-sm">
+                <span className="text-muted-foreground">Paciente: </span>
+                <span className="font-medium">{editing.patient_name}</span>
+                <span className="text-muted-foreground ml-3">Propietario: </span>
+                <span className="font-medium">{editing.owner_name}</span>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="e_service">Servicio *</Label>
+                <Select
+                  id="e_service"
+                  required
+                  value={form.service_id}
+                  onChange={(e) => setForm({ ...form, service_id: e.target.value })}
+                >
+                  <option value="">Seleccionar servicio...</option>
+                  {services.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.duration_minutes} min)
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="e_assignee">Profesional *</Label>
+                <Select
+                  id="e_assignee"
+                  required
+                  value={selectedAssignee?.id ?? editing.assigned_user_id}
+                  onChange={(e) => {
+                    const u = users.find((u) => u.id === e.target.value)
+                    setSelectedAssignee(u ?? null)
+                  }}
+                >
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.full_name} ({u.role_name})
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="e_date">Fecha *</Label>
+                  <Input
+                    id="e_date"
+                    type="date"
+                    required
+                    value={form.date}
+                    onChange={(e) => setForm({ ...form, date: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="e_time">Hora *</Label>
+                  <Input
+                    id="e_time"
+                    type="time"
+                    required
+                    value={form.time}
+                    onChange={(e) => setForm({ ...form, time: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="e_status">Estado</Label>
+                <Select
+                  id="e_status"
+                  value={form.status}
+                  onChange={(e) =>
+                    setForm({ ...form, status: e.target.value as AppointmentStatus })
+                  }
+                >
+                  <option value="pending">Pendiente</option>
+                  <option value="confirmed">Confirmada</option>
+                  <option value="cancelled">Cancelada</option>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="e_notes">Notas</Label>
+                <Textarea
+                  id="e_notes"
+                  rows={3}
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                />
+              </div>
             </div>
           ) : (
-            <div className="space-y-1.5">
-              <Label>Paciente *</Label>
-              <PatientSearch value={selectedPatient} onChange={handlePatientChange} />
+            // ── CREATE MODE: layout 2-columnas ─────────────────────────────────
+            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_360px] gap-6">
+              {/* IZQUIERDA: form */}
+              <div className="space-y-5">
+                {/* DETALLES */}
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Detalles
+                  </p>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="c_service">Servicio *</Label>
+                    <Select
+                      id="c_service"
+                      required
+                      value={form.service_id}
+                      onChange={(e) => setForm({ ...form, service_id: e.target.value })}
+                    >
+                      <option value="">Seleccionar servicio...</option>
+                      {services.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.duration_minutes} min)
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="c_date">Fecha *</Label>
+                      <Input
+                        id="c_date"
+                        type="date"
+                        required
+                        value={form.date}
+                        onChange={(e) => setForm({ ...form, date: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="c_time">Comienza *</Label>
+                      <Input
+                        id="c_time"
+                        type="time"
+                        required
+                        value={form.time}
+                        onChange={(e) => setForm({ ...form, time: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Finaliza</Label>
+                      <div className="h-9 px-3 rounded-md border border-input bg-muted/30 flex items-center text-sm text-muted-foreground">
+                        {endTime || "—"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {!showNotes ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowNotes(true)}
+                      className="text-sm text-primary hover:underline flex items-center gap-1"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Agregar notas
+                    </button>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="c_notes">Notas</Label>
+                      <Textarea
+                        id="c_notes"
+                        rows={2}
+                        value={form.notes}
+                        onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* ASOCIACIONES */}
+                <div className="space-y-3 pt-3 border-t">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Asociaciones
+                  </p>
+
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5">
+                      <UserIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                      Propietario *
+                    </Label>
+                    <OwnerCombobox value={selectedOwner} onChange={handleOwnerChange} />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5">
+                      <PawPrint className="h-3.5 w-3.5 text-muted-foreground" />
+                      Paciente *
+                    </Label>
+                    <PatientCombobox
+                      ownerId={selectedOwner?.id ?? null}
+                      value={selectedPatient}
+                      onChange={setSelectedPatient}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-1.5">
+                      <Stethoscope className="h-3.5 w-3.5 text-muted-foreground" />
+                      Profesional *
+                    </Label>
+                    <AssigneeCombobox value={selectedAssignee} onChange={setSelectedAssignee} />
+                  </div>
+                </div>
+              </div>
+
+              {/* DERECHA: timeline visual del día */}
+              <div className="rounded-lg border bg-card overflow-hidden h-[520px]">
+                {form.date ? (
+                  <DayTimeline
+                    date={new Date(form.date + "T00:00:00")}
+                    onPrevDay={() => setForm({ ...form, date: shiftDate(form.date, -1) })}
+                    onNextDay={() => setForm({ ...form, date: shiftDate(form.date, 1) })}
+                    newStartISO={newStartISO}
+                    newDurationMinutes={duration || null}
+                    existingAppointments={dayAppts}
+                    services={services}
+                    selectedServiceId={form.service_id || null}
+                    selectedAssigneeId={selectedAssignee?.id ?? null}
+                  />
+                ) : (
+                  <div className="h-full flex items-center justify-center text-sm text-muted-foreground p-6 text-center">
+                    Elegí una fecha para ver disponibilidad
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <Label htmlFor="service_id">Servicio *</Label>
-            <Select
-              id="service_id"
-              required
-              value={form.service_id}
-              onChange={(e) => setForm({ ...form, service_id: e.target.value })}
-            >
-              <option value="">Seleccionar servicio...</option>
-              {services.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.duration_minutes} min)
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="assigned_user_id">Asignado a *</Label>
-            <Select
-              id="assigned_user_id"
-              required
-              value={form.assigned_user_id}
-              onChange={(e) => setForm({ ...form, assigned_user_id: e.target.value })}
-            >
-              <option value="">Seleccionar usuario...</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.full_name} ({u.role_name})
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="scheduled_at">Fecha y hora *</Label>
-            <Input
-              id="scheduled_at"
-              type="datetime-local"
-              required
-              value={form.scheduled_at}
-              onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })}
-            />
-          </div>
-
-          {editing && (
-            <div className="space-y-1.5">
-              <Label htmlFor="status">Estado</Label>
-              <Select
-                id="status"
-                value={form.status}
-                onChange={(e) =>
-                  setForm({ ...form, status: e.target.value as AppointmentStatus })
-                }
-              >
-                <option value="pending">Pendiente</option>
-                <option value="confirmed">Confirmada</option>
-                <option value="cancelled">Cancelada</option>
-              </Select>
+          {/* Footer */}
+          <div className="flex items-center justify-between pt-4 mt-5 border-t gap-4">
+            <p className={`text-sm text-destructive ${error ? "" : "invisible"}`}>
+              {error || "placeholder"}
+            </p>
+            <div className="flex gap-2 shrink-0">
+              <Button type="button" variant="outline" onClick={closeForm}>
+                {justCreated ? "Cerrar" : "Cancelar"}
+              </Button>
+              <Button type="submit" disabled={isSaving}>
+                {isSaving
+                  ? "Guardando..."
+                  : editing
+                  ? "Guardar cambios"
+                  : justCreated
+                  ? "Crear otro servicio"
+                  : "Crear cita"}
+              </Button>
             </div>
-          )}
-
-          <div className="space-y-1.5">
-            <Label htmlFor="notes">Notas</Label>
-            <Textarea
-              id="notes"
-              rows={3}
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            />
-          </div>
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={closeForm}>
-              {justCreated ? "Cerrar" : "Cancelar"}
-            </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving
-                ? "Guardando..."
-                : editing
-                ? "Guardar cambios"
-                : justCreated
-                ? "Crear otro servicio"
-                : "Crear cita"}
-            </Button>
           </div>
         </form>
       </Dialog>
