@@ -46,7 +46,10 @@ from app.modules.appointments.router import services_router as appointment_servi
 from app.modules.catalog.router import router as catalog_router
 from app.modules.configuration.register import router as register_router
 from app.modules.configuration.router import router as configuration_router
-from app.modules.medical_records.router import router as medical_records_router
+from app.modules.medical_records.router import (
+    patient_history_router,
+    router as medical_records_router,
+)
 from app.modules.owners.router import router as owners_router
 from app.modules.patients.router import router as patients_router
 from app.modules.products.router import categories_router, movements_router, router as products_router
@@ -63,6 +66,7 @@ app.include_router(patients_router, prefix="/api/v1")
 app.include_router(appointment_services_router, prefix="/api/v1")
 app.include_router(appointments_router, prefix="/api/v1")
 app.include_router(medical_records_router, prefix="/api/v1")
+app.include_router(patient_history_router, prefix="/api/v1")
 app.include_router(categories_router, prefix="/api/v1")
 app.include_router(products_router, prefix="/api/v1")
 app.include_router(movements_router, prefix="/api/v1")

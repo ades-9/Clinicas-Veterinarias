@@ -17,13 +17,27 @@ interface PatientForm {
   breed_id: string
   birth_date: string
   weight: string
+  sex: string                  // "", "male", "female"
+  is_sterilized: string        // "", "true", "false"
+  color: string
+  microchip_number: string
+  distinctive_marks: string
+  allergies: string
+  chronic_conditions: string
+  temperament_notes: string
+  lifestyle_notes: string
+  grooming_preferences: string
   vaccination_code: string
   notes: string
 }
 
 const EMPTY: PatientForm = {
   owner_id: "", name: "", species_id: "", breed_id: "",
-  birth_date: "", weight: "", vaccination_code: "", notes: "",
+  birth_date: "", weight: "",
+  sex: "", is_sterilized: "", color: "", microchip_number: "",
+  distinctive_marks: "", allergies: "", chronic_conditions: "",
+  temperament_notes: "", lifestyle_notes: "", grooming_preferences: "",
+  vaccination_code: "", notes: "",
 }
 
 export function PatientsPage() {
@@ -93,6 +107,16 @@ export function PatientsPage() {
       breed_id: p.breed_id ?? "",
       birth_date: p.birth_date ?? "",
       weight: p.weight?.toString() ?? "",
+      sex: p.sex ?? "",
+      is_sterilized: p.is_sterilized == null ? "" : String(p.is_sterilized),
+      color: p.color ?? "",
+      microchip_number: p.microchip_number ?? "",
+      distinctive_marks: p.distinctive_marks ?? "",
+      allergies: p.allergies ?? "",
+      chronic_conditions: p.chronic_conditions ?? "",
+      temperament_notes: p.temperament_notes ?? "",
+      lifestyle_notes: p.lifestyle_notes ?? "",
+      grooming_preferences: p.grooming_preferences ?? "",
       vaccination_code: p.vaccination_code ?? "",
       notes: p.notes ?? "",
     })
@@ -111,6 +135,16 @@ export function PatientsPage() {
       breed_id: form.breed_id || null,
       birth_date: form.birth_date || null,
       weight: form.weight ? parseFloat(form.weight) : null,
+      sex: form.sex || null,
+      is_sterilized: form.is_sterilized === "" ? null : form.is_sterilized === "true",
+      color: form.color || null,
+      microchip_number: form.microchip_number || null,
+      distinctive_marks: form.distinctive_marks || null,
+      allergies: form.allergies || null,
+      chronic_conditions: form.chronic_conditions || null,
+      temperament_notes: form.temperament_notes || null,
+      lifestyle_notes: form.lifestyle_notes || null,
+      grooming_preferences: form.grooming_preferences || null,
       vaccination_code: form.vaccination_code || null,
       notes: form.notes || null,
     }
@@ -210,58 +244,145 @@ export function PatientsPage() {
       </div>
 
       {/* Crear / Editar */}
-      <Dialog open={formOpen} onClose={closeForm} title={editing ? "Editar paciente" : "Nuevo paciente"} className="max-w-lg">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="owner_id">Propietario *</Label>
-            <Select id="owner_id" required value={form.owner_id} onChange={(e) => setForm({ ...form, owner_id: e.target.value })}>
-              <option value="">Seleccionar propietario...</option>
-              {owners.map((o) => <option key={o.id} value={o.id}>{o.full_name}</option>)}
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="name">Nombre *</Label>
-            <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+      <Dialog open={formOpen} onClose={closeForm} title={editing ? "Editar paciente" : "Nuevo paciente"} className="max-w-2xl">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Datos generales */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Datos generales</p>
             <div className="space-y-1.5">
-              <Label htmlFor="species_id">Especie</Label>
-              <Select id="species_id" value={form.species_id} onChange={(e) => handleSpeciesChange(e.target.value)}>
-                <option value="">Seleccionar...</option>
-                {speciesList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              <Label htmlFor="owner_id">Propietario *</Label>
+              <Select id="owner_id" required value={form.owner_id} onChange={(e) => setForm({ ...form, owner_id: e.target.value })}>
+                <option value="">Seleccionar propietario...</option>
+                {owners.map((o) => <option key={o.id} value={o.id}>{o.full_name}</option>)}
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="breed_id">Raza</Label>
-              <Select
-                id="breed_id"
-                value={form.breed_id}
-                disabled={!form.species_id}
-                onChange={(e) => setForm({ ...form, breed_id: e.target.value })}
-              >
-                <option value="">{form.species_id ? "Seleccionar..." : "Primero elige especie"}</option>
-                {breeds.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </Select>
+              <Label htmlFor="name">Nombre *</Label>
+              <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="species_id">Especie</Label>
+                <Select id="species_id" value={form.species_id} onChange={(e) => handleSpeciesChange(e.target.value)}>
+                  <option value="">Seleccionar...</option>
+                  {speciesList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="breed_id">Raza</Label>
+                <Select
+                  id="breed_id"
+                  value={form.breed_id}
+                  disabled={!form.species_id}
+                  onChange={(e) => setForm({ ...form, breed_id: e.target.value })}
+                >
+                  <option value="">{form.species_id ? "Seleccionar..." : "Primero elige especie"}</option>
+                  {breeds.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </Select>
+              </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+
+          {/* Características físicas */}
+          <div className="space-y-3 pt-3 border-t">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Características</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="sex">Sexo</Label>
+                <Select id="sex" value={form.sex} onChange={(e) => setForm({ ...form, sex: e.target.value })}>
+                  <option value="">—</option>
+                  <option value="male">Macho</option>
+                  <option value="female">Hembra</option>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="is_sterilized">Esterilizado</Label>
+                <Select id="is_sterilized" value={form.is_sterilized} onChange={(e) => setForm({ ...form, is_sterilized: e.target.value })}>
+                  <option value="">Desconocido</option>
+                  <option value="true">Sí</option>
+                  <option value="false">No</option>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="color">Color</Label>
+                <Input id="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="birth_date">Fecha de nacimiento</Label>
+                <Input id="birth_date" type="date" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="weight">Peso (kg)</Label>
+                <Input id="weight" type="number" step="0.01" min="0" value={form.weight} onChange={(e) => setForm({ ...form, weight: e.target.value })} />
+              </div>
+            </div>
             <div className="space-y-1.5">
-              <Label htmlFor="birth_date">Fecha de nacimiento</Label>
-              <Input id="birth_date" type="date" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} />
+              <Label htmlFor="microchip_number">Número de microchip</Label>
+              <Input id="microchip_number" value={form.microchip_number} onChange={(e) => setForm({ ...form, microchip_number: e.target.value })} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="weight">Peso (kg)</Label>
-              <Input id="weight" type="number" step="0.01" min="0" value={form.weight} onChange={(e) => setForm({ ...form, weight: e.target.value })} />
+              <Label htmlFor="distinctive_marks">Marcas distintivas (cicatrices, tatuajes, señas)</Label>
+              <Textarea id="distinctive_marks" rows={2} value={form.distinctive_marks} onChange={(e) => setForm({ ...form, distinctive_marks: e.target.value })} />
             </div>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="vaccination_code">Código de vacunación</Label>
-            <Input id="vaccination_code" value={form.vaccination_code} onChange={(e) => setForm({ ...form, vaccination_code: e.target.value })} />
+
+          {/* Salud */}
+          <div className="space-y-3 pt-3 border-t">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Salud</p>
+            <div className="space-y-1.5">
+              <Label htmlFor="allergies">Alergias / intolerancias</Label>
+              <Textarea id="allergies" rows={2} value={form.allergies} onChange={(e) => setForm({ ...form, allergies: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="chronic_conditions">Enfermedades crónicas</Label>
+              <Textarea id="chronic_conditions" rows={2} value={form.chronic_conditions} onChange={(e) => setForm({ ...form, chronic_conditions: e.target.value })} />
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="notes">Notas</Label>
-            <Textarea id="notes" rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+
+          {/* Conducta y estilo de vida */}
+          <div className="space-y-3 pt-3 border-t">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Conducta y estilo de vida</p>
+            <div className="space-y-1.5">
+              <Label htmlFor="temperament_notes">Temperamento</Label>
+              <Textarea
+                id="temperament_notes"
+                rows={2}
+                value={form.temperament_notes}
+                onChange={(e) => setForm({ ...form, temperament_notes: e.target.value })}
+                placeholder="Ej. tranquilo, ansioso, agresivo con extraños..."
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="lifestyle_notes">Estilo de vida (nutrición, entorno, actividad)</Label>
+              <Textarea id="lifestyle_notes" rows={2} value={form.lifestyle_notes} onChange={(e) => setForm({ ...form, lifestyle_notes: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="grooming_preferences">Preferencias de grooming</Label>
+              <Textarea
+                id="grooming_preferences"
+                rows={2}
+                value={form.grooming_preferences}
+                onChange={(e) => setForm({ ...form, grooming_preferences: e.target.value })}
+                placeholder="Ej. cuchilla #5, sin sacar pelo de orejas..."
+              />
+            </div>
           </div>
+
+          {/* Otros */}
+          <div className="space-y-3 pt-3 border-t">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Otros</p>
+            <div className="space-y-1.5">
+              <Label htmlFor="vaccination_code">Código de vacunación</Label>
+              <Input id="vaccination_code" value={form.vaccination_code} onChange={(e) => setForm({ ...form, vaccination_code: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="notes">Notas generales</Label>
+              <Textarea id="notes" rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            </div>
+          </div>
+
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>

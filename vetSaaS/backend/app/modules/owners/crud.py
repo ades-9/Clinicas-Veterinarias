@@ -6,7 +6,8 @@ from app.core.database import set_rls_context
 from app.modules.owners.schemas import OwnerCreate, OwnerRead, OwnerUpdate
 
 _OWNER_SELECT = """
-    SELECT id, clinic_id, full_name, id_number, phone, email, address, created_at
+    SELECT id, clinic_id, full_name, id_number, phone, email, address,
+           preferred_contact, created_at
     FROM owners
     WHERE deleted_at IS NULL
 """
@@ -55,9 +56,10 @@ async def create_owner(clinic_id: str, data: OwnerCreate, session: AsyncSession)
     await set_rls_context(session, clinic_id)
     result = await session.execute(
         text("""
-            INSERT INTO owners (clinic_id, full_name, id_number, phone, email, address)
-            VALUES (:clinic_id, :full_name, :id_number, :phone, :email, :address)
-            RETURNING id, clinic_id, full_name, id_number, phone, email, address, created_at
+            INSERT INTO owners (clinic_id, full_name, id_number, phone, email, address, preferred_contact)
+            VALUES (:clinic_id, :full_name, :id_number, :phone, :email, :address, :preferred_contact)
+            RETURNING id, clinic_id, full_name, id_number, phone, email, address,
+                      preferred_contact, created_at
         """),
         {"clinic_id": clinic_id, **data.model_dump()},
     )

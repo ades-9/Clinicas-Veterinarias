@@ -9,7 +9,11 @@ _PATIENT_SELECT = """
     SELECT p.id, p.clinic_id, p.owner_id, o.full_name AS owner_name,
            p.name, p.species_id, sp.name AS species_name,
            p.breed_id, br.name AS breed_name,
-           p.birth_date, p.weight, p.vaccination_code, p.notes, p.created_at
+           p.birth_date, p.weight,
+           p.sex, p.is_sterilized, p.color, p.microchip_number,
+           p.distinctive_marks, p.allergies, p.chronic_conditions,
+           p.temperament_notes, p.lifestyle_notes, p.grooming_preferences,
+           p.vaccination_code, p.notes, p.created_at
     FROM patients p
     JOIN owners o ON o.id = p.owner_id
     LEFT JOIN species sp ON sp.id = p.species_id
@@ -71,10 +75,16 @@ async def create_patient(clinic_id: str, data: PatientCreate, session: AsyncSess
         text("""
             INSERT INTO patients
                 (clinic_id, owner_id, name, species_id, breed_id,
-                 birth_date, weight, vaccination_code, notes)
+                 birth_date, weight, sex, is_sterilized, color, microchip_number,
+                 distinctive_marks, allergies, chronic_conditions,
+                 temperament_notes, lifestyle_notes, grooming_preferences,
+                 vaccination_code, notes)
             VALUES
                 (:clinic_id, :owner_id, :name, :species_id, :breed_id,
-                 :birth_date, :weight, :vaccination_code, :notes)
+                 :birth_date, :weight, :sex, :is_sterilized, :color, :microchip_number,
+                 :distinctive_marks, :allergies, :chronic_conditions,
+                 :temperament_notes, :lifestyle_notes, :grooming_preferences,
+                 :vaccination_code, :notes)
             RETURNING id
         """),
         {"clinic_id": clinic_id, **data.model_dump()},

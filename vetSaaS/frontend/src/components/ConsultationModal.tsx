@@ -27,7 +27,10 @@ interface ClinicalState {
   prescriptions: string
   weight: string
   temperature: string
-  serviceNotes: string
+  heart_rate: string
+  respiratory_rate: string
+  pulse: string
+  physical_exam: string
 }
 
 interface Draft {
@@ -44,7 +47,10 @@ const EMPTY_CLINICAL: ClinicalState = {
   prescriptions: "",
   weight: "",
   temperature: "",
-  serviceNotes: "",
+  heart_rate: "",
+  respiratory_rate: "",
+  pulse: "",
+  physical_exam: "",
 }
 
 function draftKey(appointmentId: string) {
@@ -97,7 +103,7 @@ interface Props {
 export function ConsultationModal({ appointment, onClose, onFinalized }: Props) {
   const api = useApiClient()
   const qc = useQueryClient()
-  const showClinicalForm =
+  const reasonRequired =
     appointment.service_type === "veterinary" || appointment.service_type === "promotional"
   const DRAFT_KEY = draftKey(appointment.id)
 
@@ -158,8 +164,7 @@ export function ConsultationModal({ appointment, onClose, onFinalized }: Props) 
   // Close protection
   function hasContent() {
     if (hadDraft.current) return true
-    if (showClinicalForm && clinical.reason.trim()) return true
-    if (!showClinicalForm && clinical.serviceNotes.trim()) return true
+    if (Object.values(clinical).some((v) => v.trim())) return true
     if (cart.some((i) => i.type === "product")) return true
     if (saleNotes.trim()) return true
     return false
@@ -239,22 +244,25 @@ export function ConsultationModal({ appointment, onClose, onFinalized }: Props) 
   // Finalize
   const finalizeMutation = useMutation({
     mutationFn: async () => {
-      if (showClinicalForm && !clinical.reason.trim()) throw new Error("El motivo de consulta es obligatorio")
+      if (reasonRequired && !clinical.reason.trim()) throw new Error("El motivo de consulta es obligatorio")
       if (cart.length === 0) throw new Error("El carrito no puede estar vacío")
 
-      // 1. Medical record (veterinary + promotional)
-      if (showClinicalForm) {
-        await api.post("/medical-records", {
-          patient_id: appointment.patient_id,
-          appointment_id: appointment.id,
-          reason: clinical.reason,
-          diagnosis: clinical.diagnosis || null,
-          treatment: clinical.treatment || null,
-          prescriptions: clinical.prescriptions || null,
-          weight: clinical.weight ? parseFloat(clinical.weight) : null,
-          temperature: clinical.temperature ? parseFloat(clinical.temperature) : null,
-        })
-      }
+      // 1. Medical record — always created. For grooming sin motivo, usamos el nombre del servicio.
+      const reasonValue = clinical.reason.trim() || appointment.service_name
+      await api.post("/medical-records", {
+        patient_id: appointment.patient_id,
+        appointment_id: appointment.id,
+        reason: reasonValue,
+        diagnosis: clinical.diagnosis || null,
+        treatment: clinical.treatment || null,
+        prescriptions: clinical.prescriptions || null,
+        weight: clinical.weight ? parseFloat(clinical.weight) : null,
+        temperature: clinical.temperature ? parseFloat(clinical.temperature) : null,
+        heart_rate: clinical.heart_rate ? parseInt(clinical.heart_rate, 10) : null,
+        respiratory_rate: clinical.respiratory_rate ? parseInt(clinical.respiratory_rate, 10) : null,
+        pulse: clinical.pulse || null,
+        physical_exam: clinical.physical_exam || null,
+      })
 
       // 2. Sale
       await api.post("/sales", {
@@ -342,7 +350,7 @@ export function ConsultationModal({ appointment, onClose, onFinalized }: Props) 
         <div className="px-6 py-3 border-b flex items-center gap-6 shrink-0">
           <StepDot
             n={1}
-            label={showClinicalForm ? "Historia clínica" : "Notas del servicio"}
+            label="Historia clínica"
             active={step === 1}
             done={step > 1}
           />
@@ -353,83 +361,137 @@ export function ConsultationModal({ appointment, onClose, onFinalized }: Props) 
         {/* Body */}
         <div className="overflow-y-auto flex-1 p-6">
           {step === 1 ? (
-            <div className="space-y-4">
-              {showClinicalForm ? (
-                <>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="c_reason">Motivo de consulta *</Label>
-                    <Textarea
-                      id="c_reason"
-                      rows={2}
-                      value={clinical.reason}
-                      onChange={(e) => setClinical({ ...clinical, reason: e.target.value })}
-                      placeholder="Descripción del motivo de la visita"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="c_diagnosis">Diagnóstico</Label>
-                    <Textarea
-                      id="c_diagnosis"
-                      rows={2}
-                      value={clinical.diagnosis}
-                      onChange={(e) => setClinical({ ...clinical, diagnosis: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="c_treatment">Tratamiento</Label>
-                    <Textarea
-                      id="c_treatment"
-                      rows={2}
-                      value={clinical.treatment}
-                      onChange={(e) => setClinical({ ...clinical, treatment: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="c_prescriptions">Prescripciones</Label>
-                    <Textarea
-                      id="c_prescriptions"
-                      rows={2}
-                      value={clinical.prescriptions}
-                      onChange={(e) => setClinical({ ...clinical, prescriptions: e.target.value })}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="c_weight">Peso (kg)</Label>
-                      <Input
-                        id="c_weight"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={clinical.weight}
-                        onChange={(e) => setClinical({ ...clinical, weight: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="c_temp">Temperatura (°C)</Label>
-                      <Input
-                        id="c_temp"
-                        type="number"
-                        min="0"
-                        step="0.1"
-                        value={clinical.temperature}
-                        onChange={(e) => setClinical({ ...clinical, temperature: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                </>
-              ) : (
+            <div className="space-y-5">
+              {/* S — Subjetivo */}
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  S — Subjetivo (anamnesis)
+                </p>
                 <div className="space-y-1.5">
-                  <Label htmlFor="c_service_notes">Notas del servicio</Label>
+                  <Label htmlFor="c_reason">Motivo de consulta {reasonRequired && "*"}</Label>
                   <Textarea
-                    id="c_service_notes"
-                    rows={5}
-                    value={clinical.serviceNotes}
-                    onChange={(e) => setClinical({ ...clinical, serviceNotes: e.target.value })}
-                    placeholder="Observaciones del servicio de estética..."
+                    id="c_reason"
+                    rows={2}
+                    value={clinical.reason}
+                    onChange={(e) => setClinical({ ...clinical, reason: e.target.value })}
+                    placeholder={reasonRequired ? "Síntomas descritos por el dueño, duración, antecedentes..." : "Opcional"}
                   />
                 </div>
-              )}
+              </div>
+
+              {/* O — Objetivo */}
+              <div className="space-y-3 pt-3 border-t">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  O — Objetivo (examen clínico)
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="c_weight">Peso (kg)</Label>
+                    <Input
+                      id="c_weight"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={clinical.weight}
+                      onChange={(e) => setClinical({ ...clinical, weight: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="c_temp">Temperatura (°C)</Label>
+                    <Input
+                      id="c_temp"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={clinical.temperature}
+                      onChange={(e) => setClinical({ ...clinical, temperature: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="c_hr">FC (lpm)</Label>
+                    <Input
+                      id="c_hr"
+                      type="number"
+                      min="0"
+                      value={clinical.heart_rate}
+                      onChange={(e) => setClinical({ ...clinical, heart_rate: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="c_rr">FR (rpm)</Label>
+                    <Input
+                      id="c_rr"
+                      type="number"
+                      min="0"
+                      value={clinical.respiratory_rate}
+                      onChange={(e) => setClinical({ ...clinical, respiratory_rate: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="c_pulse">Pulso</Label>
+                    <Input
+                      id="c_pulse"
+                      value={clinical.pulse}
+                      onChange={(e) => setClinical({ ...clinical, pulse: e.target.value })}
+                      placeholder="Ej. fuerte y regular"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="c_physical">Examen físico</Label>
+                  <Textarea
+                    id="c_physical"
+                    rows={3}
+                    value={clinical.physical_exam}
+                    onChange={(e) => setClinical({ ...clinical, physical_exam: e.target.value })}
+                    placeholder="Exploración sistemática de órganos y sistemas..."
+                  />
+                </div>
+              </div>
+
+              {/* A — Avalúo */}
+              <div className="space-y-3 pt-3 border-t">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  A — Avalúo (diagnóstico)
+                </p>
+                <div className="space-y-1.5">
+                  <Label htmlFor="c_diagnosis">Diagnóstico presuntivo o definitivo</Label>
+                  <Textarea
+                    id="c_diagnosis"
+                    rows={2}
+                    value={clinical.diagnosis}
+                    onChange={(e) => setClinical({ ...clinical, diagnosis: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* P — Plan */}
+              <div className="space-y-3 pt-3 border-t">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  P — Plan (tratamiento)
+                </p>
+                <div className="space-y-1.5">
+                  <Label htmlFor="c_treatment">Tratamiento</Label>
+                  <Textarea
+                    id="c_treatment"
+                    rows={2}
+                    value={clinical.treatment}
+                    onChange={(e) => setClinical({ ...clinical, treatment: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="c_prescriptions">Prescripciones</Label>
+                  <Textarea
+                    id="c_prescriptions"
+                    rows={2}
+                    value={clinical.prescriptions}
+                    onChange={(e) => setClinical({ ...clinical, prescriptions: e.target.value })}
+                    placeholder="Medicamento, concentración, dosis, frecuencia, duración..."
+                  />
+                </div>
+              </div>
             </div>
           ) : (
             <div className="space-y-5">

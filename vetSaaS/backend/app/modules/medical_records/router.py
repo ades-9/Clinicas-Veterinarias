@@ -12,14 +12,19 @@ from app.core.storage import medical_record_attachment_key, upload_file
 from app.modules.medical_records import crud
 from app.modules.medical_records.schemas import (
     AttachmentRead,
+    DewormingCreate,
+    DewormingRead,
     MedicalRecordCreate,
     MedicalRecordRead,
     MedicalRecordUpdate,
+    SurgeryCreate,
+    SurgeryRead,
     VaccinationCreate,
     VaccinationRead,
 )
 
 router = APIRouter(prefix="/medical-records", tags=["medical_records"])
+patient_history_router = APIRouter(prefix="/patients", tags=["medical_records"])
 
 _ALLOWED_ATTACHMENT_TYPES = {
     "image/png", "image/jpeg", "image/webp",
@@ -30,7 +35,7 @@ _ALLOWED_ATTACHMENT_TYPES = {
 @router.get("", response_model=list[MedicalRecordRead])
 async def list_records(
     patient_id: str | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     user: CurrentUser = require_permission("medical_records.view"),
     session: AsyncSession = Depends(get_db),
@@ -93,3 +98,69 @@ async def add_vaccination(
     session: AsyncSession = Depends(get_db),
 ):
     return await crud.add_vaccination(record_id, user.clinic_id, data, session)
+
+
+# ── Dewormings ────────────────────────────────────────────────────────────────
+
+@router.post("/{record_id}/dewormings", response_model=DewormingRead, status_code=http_status.HTTP_201_CREATED)
+async def add_deworming_to_record(
+    record_id: str,
+    data: DewormingCreate,
+    user: CurrentUser = require_permission("medical_records.edit"),
+    session: AsyncSession = Depends(get_db),
+):
+    return await crud.add_deworming_to_record(record_id, user.clinic_id, data, session)
+
+
+@patient_history_router.post(
+    "/{patient_id}/dewormings", response_model=DewormingRead, status_code=http_status.HTTP_201_CREATED
+)
+async def add_deworming_to_patient(
+    patient_id: str,
+    data: DewormingCreate,
+    user: CurrentUser = require_permission("medical_records.edit"),
+    session: AsyncSession = Depends(get_db),
+):
+    return await crud.add_deworming_to_patient(patient_id, user.clinic_id, data, session)
+
+
+@patient_history_router.get("/{patient_id}/dewormings", response_model=list[DewormingRead])
+async def list_patient_dewormings(
+    patient_id: str,
+    user: CurrentUser = require_permission("medical_records.view"),
+    session: AsyncSession = Depends(get_db),
+):
+    return await crud.list_patient_dewormings(patient_id, user.clinic_id, session)
+
+
+# ── Surgeries ─────────────────────────────────────────────────────────────────
+
+@router.post("/{record_id}/surgeries", response_model=SurgeryRead, status_code=http_status.HTTP_201_CREATED)
+async def add_surgery_to_record(
+    record_id: str,
+    data: SurgeryCreate,
+    user: CurrentUser = require_permission("medical_records.edit"),
+    session: AsyncSession = Depends(get_db),
+):
+    return await crud.add_surgery_to_record(record_id, user.clinic_id, data, session)
+
+
+@patient_history_router.post(
+    "/{patient_id}/surgeries", response_model=SurgeryRead, status_code=http_status.HTTP_201_CREATED
+)
+async def add_surgery_to_patient(
+    patient_id: str,
+    data: SurgeryCreate,
+    user: CurrentUser = require_permission("medical_records.edit"),
+    session: AsyncSession = Depends(get_db),
+):
+    return await crud.add_surgery_to_patient(patient_id, user.clinic_id, data, session)
+
+
+@patient_history_router.get("/{patient_id}/surgeries", response_model=list[SurgeryRead])
+async def list_patient_surgeries(
+    patient_id: str,
+    user: CurrentUser = require_permission("medical_records.view"),
+    session: AsyncSession = Depends(get_db),
+):
+    return await crud.list_patient_surgeries(patient_id, user.clinic_id, session)

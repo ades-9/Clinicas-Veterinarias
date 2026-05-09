@@ -1,7 +1,10 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
+
+PreferredContact = Literal["whatsapp", "sms", "email", "phone"]
 
 
 class OwnerRead(BaseModel):
@@ -12,6 +15,7 @@ class OwnerRead(BaseModel):
     phone: str | None
     email: str | None
     address: str | None
+    preferred_contact: PreferredContact | None
     created_at: datetime
 
 
@@ -21,6 +25,7 @@ class OwnerCreate(BaseModel):
     phone: str | None = None
     email: str | None = None
     address: str | None = None
+    preferred_contact: PreferredContact | None = None
 
 
 class OwnerUpdate(BaseModel):
@@ -29,3 +34,4 @@ class OwnerUpdate(BaseModel):
     phone: str | None = None
     email: str | None = None
     address: str | None = None
+    preferred_contact: PreferredContact | None = None

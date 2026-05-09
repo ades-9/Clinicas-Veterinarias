@@ -27,6 +27,8 @@ export interface User {
   created_at: string
 }
 
+export type PreferredContact = "whatsapp" | "sms" | "email" | "phone"
+
 export interface Owner {
   id: string
   clinic_id: string
@@ -35,8 +37,11 @@ export interface Owner {
   phone: string | null
   email: string | null
   address: string | null
+  preferred_contact: PreferredContact | null
   created_at: string
 }
+
+export type PatientSex = "male" | "female"
 
 export interface Patient {
   id: string
@@ -50,6 +55,16 @@ export interface Patient {
   breed_name: string | null
   birth_date: string | null
   weight: number | null
+  sex: PatientSex | null
+  is_sterilized: boolean | null
+  color: string | null
+  microchip_number: string | null
+  distinctive_marks: string | null
+  allergies: string | null
+  chronic_conditions: string | null
+  temperament_notes: string | null
+  lifestyle_notes: string | null
+  grooming_preferences: string | null
   vaccination_code: string | null
   notes: string | null
   created_at: string
@@ -118,6 +133,36 @@ export interface Vaccination {
   created_at: string
 }
 
+export type DewormingType = "internal" | "external" | "both"
+
+export interface Deworming {
+  id: string
+  clinic_id: string
+  patient_id: string
+  medical_record_id: string | null
+  product_name: string
+  treatment_type: DewormingType
+  applied_at: string
+  next_dose_at: string | null
+  weight_at_application: number | null
+  batch_number: string | null
+  notes: string | null
+  created_at: string
+}
+
+export interface Surgery {
+  id: string
+  clinic_id: string
+  patient_id: string
+  medical_record_id: string | null
+  name: string
+  performed_at: string
+  veterinarian_name: string | null
+  description: string | null
+  complications: string | null
+  created_at: string
+}
+
 export interface Attachment {
   id: string
   clinic_id: string
@@ -142,9 +187,15 @@ export interface MedicalRecord {
   prescriptions: string | null
   weight: number | null
   temperature: number | null
+  heart_rate: number | null
+  respiratory_rate: number | null
+  pulse: string | null
+  physical_exam: string | null
   visit_date: string
   created_at: string
   vaccinations: Vaccination[]
+  dewormings: Deworming[]
+  surgeries: Surgery[]
   attachments: Attachment[]
 }
 

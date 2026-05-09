@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import type { Owner } from "@/types"
 
 interface OwnerForm {
@@ -14,9 +15,13 @@ interface OwnerForm {
   phone: string
   email: string
   address: string
+  preferred_contact: string  // "", "whatsapp", "sms", "email", "phone"
 }
 
-const EMPTY: OwnerForm = { full_name: "", id_number: "", phone: "", email: "", address: "" }
+const EMPTY: OwnerForm = {
+  full_name: "", id_number: "", phone: "", email: "", address: "",
+  preferred_contact: "",
+}
 
 export function OwnersPage() {
   const api = useApiClient()
@@ -68,6 +73,7 @@ export function OwnersPage() {
       phone: owner.phone ?? "",
       email: owner.email ?? "",
       address: owner.address ?? "",
+      preferred_contact: owner.preferred_contact ?? "",
     })
     setError("")
     setFormOpen(true)
@@ -89,6 +95,7 @@ export function OwnersPage() {
       phone: form.phone || null,
       email: form.email || null,
       address: form.address || null,
+      preferred_contact: form.preferred_contact || null,
     }
     if (editing) {
       updateMutation.mutate({ id: editing.id, data: payload })
@@ -232,6 +239,20 @@ export function OwnersPage() {
               value={form.address}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="preferred_contact">Canal de contacto preferido</Label>
+            <Select
+              id="preferred_contact"
+              value={form.preferred_contact}
+              onChange={(e) => setForm({ ...form, preferred_contact: e.target.value })}
+            >
+              <option value="">Sin preferencia</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="sms">SMS</option>
+              <option value="email">Email</option>
+              <option value="phone">Llamada</option>
+            </Select>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">

@@ -1,13 +1,17 @@
 from fastapi import HTTPException, status
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import set_rls_context
 from app.modules.medical_records.schemas import (
     AttachmentRead,
+    DewormingCreate,
+    DewormingRead,
     MedicalRecordCreate,
     MedicalRecordRead,
     MedicalRecordUpdate,
+    SurgeryCreate,
+    SurgeryRead,
     VaccinationCreate,
     VaccinationRead,
 )
@@ -16,7 +20,9 @@ _RECORD_SELECT = """
     SELECT mr.id, mr.clinic_id, mr.patient_id, p.name AS patient_name,
            mr.veterinarian_id, u.full_name AS veterinarian_name,
            mr.appointment_id, mr.reason, mr.diagnosis, mr.treatment,
-           mr.prescriptions, mr.weight, mr.temperature, mr.visit_date, mr.created_at
+           mr.prescriptions, mr.weight, mr.temperature,
+           mr.heart_rate, mr.respiratory_rate, mr.pulse, mr.physical_exam,
+           mr.visit_date, mr.created_at
     FROM medical_records mr
     JOIN patients p ON p.id = mr.patient_id
     JOIN users u ON u.id = mr.veterinarian_id
@@ -24,31 +30,99 @@ _RECORD_SELECT = """
 """
 
 
-async def _load_vaccinations(record_id: str, session: AsyncSession) -> list[VaccinationRead]:
-    result = await session.execute(
-        text("""
-            SELECT id, clinic_id, patient_id, medical_record_id,
-                   vaccine_name, applied_at, next_dose_at, batch_number, created_at
-            FROM vaccinations
-            WHERE medical_record_id = :record_id AND deleted_at IS NULL
-            ORDER BY applied_at
-        """),
-        {"record_id": record_id},
-    )
-    return [VaccinationRead(**row) for row in result.mappings()]
+async def _bulk_load_vaccinations(
+    record_ids: list[str], session: AsyncSession
+) -> dict[str, list[VaccinationRead]]:
+    if not record_ids:
+        return {}
+    stmt = text("""
+        SELECT id, clinic_id, patient_id, medical_record_id,
+               vaccine_name, applied_at, next_dose_at, batch_number, created_at
+        FROM vaccinations
+        WHERE medical_record_id IN :ids AND deleted_at IS NULL
+        ORDER BY applied_at
+    """).bindparams(bindparam("ids", expanding=True))
+    result = await session.execute(stmt, {"ids": record_ids})
+    grouped: dict[str, list[VaccinationRead]] = {}
+    for row in result.mappings():
+        grouped.setdefault(str(row["medical_record_id"]), []).append(VaccinationRead(**row))
+    return grouped
 
 
-async def _load_attachments(record_id: str, session: AsyncSession) -> list[AttachmentRead]:
-    result = await session.execute(
-        text("""
-            SELECT id, clinic_id, medical_record_id, file_url, file_name, file_type, created_at
-            FROM medical_record_attachments
-            WHERE medical_record_id = :record_id AND deleted_at IS NULL
-            ORDER BY created_at
-        """),
-        {"record_id": record_id},
-    )
-    return [AttachmentRead(**row) for row in result.mappings()]
+async def _bulk_load_attachments(
+    record_ids: list[str], session: AsyncSession
+) -> dict[str, list[AttachmentRead]]:
+    if not record_ids:
+        return {}
+    stmt = text("""
+        SELECT id, clinic_id, medical_record_id, file_url, file_name, file_type, created_at
+        FROM medical_record_attachments
+        WHERE medical_record_id IN :ids AND deleted_at IS NULL
+        ORDER BY created_at
+    """).bindparams(bindparam("ids", expanding=True))
+    result = await session.execute(stmt, {"ids": record_ids})
+    grouped: dict[str, list[AttachmentRead]] = {}
+    for row in result.mappings():
+        grouped.setdefault(str(row["medical_record_id"]), []).append(AttachmentRead(**row))
+    return grouped
+
+
+async def _bulk_load_dewormings(
+    record_ids: list[str], session: AsyncSession
+) -> dict[str, list[DewormingRead]]:
+    if not record_ids:
+        return {}
+    stmt = text("""
+        SELECT id, clinic_id, patient_id, medical_record_id,
+               product_name, treatment_type, applied_at, next_dose_at,
+               weight_at_application, batch_number, notes, created_at
+        FROM dewormings
+        WHERE medical_record_id IN :ids AND deleted_at IS NULL
+        ORDER BY applied_at
+    """).bindparams(bindparam("ids", expanding=True))
+    result = await session.execute(stmt, {"ids": record_ids})
+    grouped: dict[str, list[DewormingRead]] = {}
+    for row in result.mappings():
+        grouped.setdefault(str(row["medical_record_id"]), []).append(DewormingRead(**row))
+    return grouped
+
+
+async def _bulk_load_surgeries(
+    record_ids: list[str], session: AsyncSession
+) -> dict[str, list[SurgeryRead]]:
+    if not record_ids:
+        return {}
+    stmt = text("""
+        SELECT id, clinic_id, patient_id, medical_record_id,
+               name, performed_at, veterinarian_name, description, complications, created_at
+        FROM surgeries
+        WHERE medical_record_id IN :ids AND deleted_at IS NULL
+        ORDER BY performed_at
+    """).bindparams(bindparam("ids", expanding=True))
+    result = await session.execute(stmt, {"ids": record_ids})
+    grouped: dict[str, list[SurgeryRead]] = {}
+    for row in result.mappings():
+        grouped.setdefault(str(row["medical_record_id"]), []).append(SurgeryRead(**row))
+    return grouped
+
+
+async def _attach_associations(
+    records: list[MedicalRecordRead], session: AsyncSession
+) -> None:
+    """Bulk-load vaccinations, dewormings, surgeries y attachments en cada record (in-place)."""
+    if not records:
+        return
+    record_ids = [str(r.id) for r in records]
+    vaccinations = await _bulk_load_vaccinations(record_ids, session)
+    dewormings = await _bulk_load_dewormings(record_ids, session)
+    surgeries = await _bulk_load_surgeries(record_ids, session)
+    attachments = await _bulk_load_attachments(record_ids, session)
+    for r in records:
+        rid = str(r.id)
+        r.vaccinations = vaccinations.get(rid, [])
+        r.dewormings = dewormings.get(rid, [])
+        r.surgeries = surgeries.get(rid, [])
+        r.attachments = attachments.get(rid, [])
 
 
 async def list_records(
@@ -71,7 +145,9 @@ async def list_records(
         text(f"{_RECORD_SELECT}{filters} ORDER BY mr.visit_date DESC LIMIT :limit OFFSET :offset"),
         params,
     )
-    return [MedicalRecordRead(**row) for row in result.mappings()]
+    records = [MedicalRecordRead(**row) for row in result.mappings()]
+    await _attach_associations(records, session)
+    return records
 
 
 async def get_record(record_id: str, clinic_id: str, session: AsyncSession) -> MedicalRecordRead:
@@ -85,8 +161,7 @@ async def get_record(record_id: str, clinic_id: str, session: AsyncSession) -> M
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Historia clínica no encontrada")
 
     record = MedicalRecordRead(**row)
-    record.vaccinations = await _load_vaccinations(str(record.id), session)
-    record.attachments = await _load_attachments(str(record.id), session)
+    await _attach_associations([record], session)
     return record
 
 
@@ -123,11 +198,13 @@ async def create_record(
             INSERT INTO medical_records
                 (clinic_id, patient_id, veterinarian_id, appointment_id,
                  reason, diagnosis, treatment, prescriptions,
-                 weight, temperature, visit_date)
+                 weight, temperature, heart_rate, respiratory_rate, pulse, physical_exam,
+                 visit_date)
             VALUES
                 (:clinic_id, :patient_id, :veterinarian_id, :appointment_id,
                  :reason, :diagnosis, :treatment, :prescriptions,
-                 :weight, :temperature, COALESCE(:visit_date, NOW()))
+                 :weight, :temperature, :heart_rate, :respiratory_rate, :pulse, :physical_exam,
+                 COALESCE(:visit_date, NOW()))
             RETURNING id
         """),
         {
@@ -141,6 +218,10 @@ async def create_record(
             "prescriptions": data.prescriptions,
             "weight": data.weight,
             "temperature": data.temperature,
+            "heart_rate": data.heart_rate,
+            "respiratory_rate": data.respiratory_rate,
+            "pulse": data.pulse,
+            "physical_exam": data.physical_exam,
             "visit_date": data.visit_date,
         },
     )
@@ -268,3 +349,165 @@ async def add_vaccination(
     vacc_row = result.mappings().first()
     await session.commit()
     return VaccinationRead(**vacc_row)
+
+
+# ── Dewormings ────────────────────────────────────────────────────────────────
+
+_DEWORMING_RETURNING = """
+    RETURNING id, clinic_id, patient_id, medical_record_id,
+              product_name, treatment_type, applied_at, next_dose_at,
+              weight_at_application, batch_number, notes, created_at
+"""
+
+
+async def _resolve_patient_from_record(record_id: str, session: AsyncSession) -> str:
+    row = await session.execute(
+        text("SELECT patient_id FROM medical_records WHERE id = :id AND deleted_at IS NULL"),
+        {"id": record_id},
+    )
+    mapping = row.mappings().first()
+    if mapping is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Historia clínica no encontrada")
+    return str(mapping["patient_id"])
+
+
+async def _ensure_patient_exists(patient_id: str, session: AsyncSession) -> None:
+    row = await session.execute(
+        text("SELECT 1 FROM patients WHERE id = :id AND deleted_at IS NULL"),
+        {"id": patient_id},
+    )
+    if row.scalar() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente no encontrado")
+
+
+async def add_deworming_to_record(
+    record_id: str, clinic_id: str, data: DewormingCreate, session: AsyncSession
+) -> DewormingRead:
+    await set_rls_context(session, clinic_id)
+    patient_id = await _resolve_patient_from_record(record_id, session)
+    result = await session.execute(
+        text(f"""
+            INSERT INTO dewormings
+                (clinic_id, patient_id, medical_record_id, product_name, treatment_type,
+                 applied_at, next_dose_at, weight_at_application, batch_number, notes)
+            VALUES
+                (:clinic_id, :patient_id, :record_id, :product_name, :treatment_type,
+                 :applied_at, :next_dose_at, :weight_at_application, :batch_number, :notes)
+            {_DEWORMING_RETURNING}
+        """),
+        {"clinic_id": clinic_id, "patient_id": patient_id, "record_id": record_id, **data.model_dump()},
+    )
+    deworming = DewormingRead(**result.mappings().first())
+    await session.commit()
+    return deworming
+
+
+async def add_deworming_to_patient(
+    patient_id: str, clinic_id: str, data: DewormingCreate, session: AsyncSession
+) -> DewormingRead:
+    await set_rls_context(session, clinic_id)
+    await _ensure_patient_exists(patient_id, session)
+    result = await session.execute(
+        text(f"""
+            INSERT INTO dewormings
+                (clinic_id, patient_id, medical_record_id, product_name, treatment_type,
+                 applied_at, next_dose_at, weight_at_application, batch_number, notes)
+            VALUES
+                (:clinic_id, :patient_id, NULL, :product_name, :treatment_type,
+                 :applied_at, :next_dose_at, :weight_at_application, :batch_number, :notes)
+            {_DEWORMING_RETURNING}
+        """),
+        {"clinic_id": clinic_id, "patient_id": patient_id, **data.model_dump()},
+    )
+    deworming = DewormingRead(**result.mappings().first())
+    await session.commit()
+    return deworming
+
+
+# ── Surgeries ─────────────────────────────────────────────────────────────────
+
+_SURGERY_RETURNING = """
+    RETURNING id, clinic_id, patient_id, medical_record_id,
+              name, performed_at, veterinarian_name, description, complications, created_at
+"""
+
+
+async def add_surgery_to_record(
+    record_id: str, clinic_id: str, data: SurgeryCreate, session: AsyncSession
+) -> SurgeryRead:
+    await set_rls_context(session, clinic_id)
+    patient_id = await _resolve_patient_from_record(record_id, session)
+    result = await session.execute(
+        text(f"""
+            INSERT INTO surgeries
+                (clinic_id, patient_id, medical_record_id, name, performed_at,
+                 veterinarian_name, description, complications)
+            VALUES
+                (:clinic_id, :patient_id, :record_id, :name, :performed_at,
+                 :veterinarian_name, :description, :complications)
+            {_SURGERY_RETURNING}
+        """),
+        {"clinic_id": clinic_id, "patient_id": patient_id, "record_id": record_id, **data.model_dump()},
+    )
+    surgery = SurgeryRead(**result.mappings().first())
+    await session.commit()
+    return surgery
+
+
+async def add_surgery_to_patient(
+    patient_id: str, clinic_id: str, data: SurgeryCreate, session: AsyncSession
+) -> SurgeryRead:
+    await set_rls_context(session, clinic_id)
+    await _ensure_patient_exists(patient_id, session)
+    result = await session.execute(
+        text(f"""
+            INSERT INTO surgeries
+                (clinic_id, patient_id, medical_record_id, name, performed_at,
+                 veterinarian_name, description, complications)
+            VALUES
+                (:clinic_id, :patient_id, NULL, :name, :performed_at,
+                 :veterinarian_name, :description, :complications)
+            {_SURGERY_RETURNING}
+        """),
+        {"clinic_id": clinic_id, "patient_id": patient_id, **data.model_dump()},
+    )
+    surgery = SurgeryRead(**result.mappings().first())
+    await session.commit()
+    return surgery
+
+
+# ── Patient-scoped listing (incluye antecedentes sin consulta) ────────────────
+
+async def list_patient_dewormings(
+    patient_id: str, clinic_id: str, session: AsyncSession
+) -> list[DewormingRead]:
+    await set_rls_context(session, clinic_id)
+    result = await session.execute(
+        text("""
+            SELECT id, clinic_id, patient_id, medical_record_id,
+                   product_name, treatment_type, applied_at, next_dose_at,
+                   weight_at_application, batch_number, notes, created_at
+            FROM dewormings
+            WHERE patient_id = :patient_id AND deleted_at IS NULL
+            ORDER BY applied_at DESC
+        """),
+        {"patient_id": patient_id},
+    )
+    return [DewormingRead(**row) for row in result.mappings()]
+
+
+async def list_patient_surgeries(
+    patient_id: str, clinic_id: str, session: AsyncSession
+) -> list[SurgeryRead]:
+    await set_rls_context(session, clinic_id)
+    result = await session.execute(
+        text("""
+            SELECT id, clinic_id, patient_id, medical_record_id,
+                   name, performed_at, veterinarian_name, description, complications, created_at
+            FROM surgeries
+            WHERE patient_id = :patient_id AND deleted_at IS NULL
+            ORDER BY performed_at DESC
+        """),
+        {"patient_id": patient_id},
+    )
+    return [SurgeryRead(**row) for row in result.mappings()]

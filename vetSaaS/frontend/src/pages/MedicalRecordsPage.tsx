@@ -1,15 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowLeft, BookOpen, Paperclip, Plus, Search, Syringe } from "lucide-react"
+import { ArrowLeft, BookOpen, Bug, Paperclip, Plus, Scissors, Search, Syringe } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useApiClient } from "@/api/client"
+import { DewormingDialog } from "@/components/DewormingDialog"
 import { PatientSearch } from "@/components/PatientSearch"
+import { SurgeryDialog } from "@/components/SurgeryDialog"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import type { MedicalRecord, Patient, User } from "@/types"
+import type { Deworming, MedicalRecord, Patient, Surgery, User } from "@/types"
 
 // ── Formulario nueva consulta ─────────────────────────────────────────────────
 
@@ -22,6 +24,10 @@ interface RecordForm {
   prescriptions: string
   weight: string
   temperature: string
+  heart_rate: string
+  respiratory_rate: string
+  pulse: string
+  physical_exam: string
   visit_date: string
 }
 
@@ -34,6 +40,10 @@ const EMPTY_FORM: RecordForm = {
   prescriptions: "",
   weight: "",
   temperature: "",
+  heart_rate: "",
+  respiratory_rate: "",
+  pulse: "",
+  physical_exam: "",
   visit_date: new Date().toISOString().slice(0, 10),
 }
 
@@ -91,90 +101,176 @@ function NewRecordDialog({ open, onClose, initialPatient }: NewRecordDialogProps
       prescriptions: form.prescriptions || null,
       weight: form.weight ? parseFloat(form.weight) : null,
       temperature: form.temperature ? parseFloat(form.temperature) : null,
+      heart_rate: form.heart_rate ? parseInt(form.heart_rate, 10) : null,
+      respiratory_rate: form.respiratory_rate ? parseInt(form.respiratory_rate, 10) : null,
+      pulse: form.pulse || null,
+      physical_exam: form.physical_exam || null,
       visit_date: form.visit_date,
     })
   }
 
   return (
-    <Dialog open={open} onClose={onClose} title="Nueva consulta" className="max-w-lg">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-1.5">
-          <Label>Paciente *</Label>
-          <PatientSearch value={formPatient} onChange={handlePatientChange} />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="vet_id">Veterinario *</Label>
-          <Select
-            id="vet_id"
-            required
-            value={form.veterinarian_id}
-            onChange={(e) => setForm({ ...form, veterinarian_id: e.target.value })}
-          >
-            <option value="">Seleccionar veterinario...</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>{u.full_name}</option>
-            ))}
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="visit_date">Fecha *</Label>
-          <Input
-            id="visit_date"
-            type="date"
-            required
-            value={form.visit_date}
-            onChange={(e) => setForm({ ...form, visit_date: e.target.value })}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="reason">Motivo de consulta *</Label>
-          <Textarea
-            id="reason"
-            required
-            rows={2}
-            value={form.reason}
-            onChange={(e) => setForm({ ...form, reason: e.target.value })}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
+    <Dialog open={open} onClose={onClose} title="Nueva consulta" className="max-w-2xl">
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Datos generales */}
+        <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Datos generales</p>
           <div className="space-y-1.5">
-            <Label htmlFor="weight">Peso (kg)</Label>
-            <Input
-              id="weight"
-              type="number"
-              step="0.01"
-              min="0"
-              value={form.weight}
-              onChange={(e) => setForm({ ...form, weight: e.target.value })}
-            />
+            <Label>Paciente *</Label>
+            <PatientSearch value={formPatient} onChange={handlePatientChange} />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="vet_id">Veterinario *</Label>
+              <Select
+                id="vet_id"
+                required
+                value={form.veterinarian_id}
+                onChange={(e) => setForm({ ...form, veterinarian_id: e.target.value })}
+              >
+                <option value="">Seleccionar veterinario...</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.full_name}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="visit_date">Fecha *</Label>
+              <Input
+                id="visit_date"
+                type="date"
+                required
+                value={form.visit_date}
+                onChange={(e) => setForm({ ...form, visit_date: e.target.value })}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* S — Subjetivo */}
+        <div className="space-y-3 pt-3 border-t">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            S — Subjetivo (anamnesis)
+          </p>
           <div className="space-y-1.5">
-            <Label htmlFor="temperature">Temperatura (°C)</Label>
-            <Input
-              id="temperature"
-              type="number"
-              step="0.1"
-              min="0"
-              value={form.temperature}
-              onChange={(e) => setForm({ ...form, temperature: e.target.value })}
+            <Label htmlFor="reason">Motivo de consulta *</Label>
+            <Textarea
+              id="reason"
+              required
+              rows={2}
+              value={form.reason}
+              onChange={(e) => setForm({ ...form, reason: e.target.value })}
+              placeholder="Síntomas descritos por el dueño, duración, antecedentes..."
             />
           </div>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="diagnosis">Diagnóstico</Label>
-          <Textarea id="diagnosis" rows={2} value={form.diagnosis}
-            onChange={(e) => setForm({ ...form, diagnosis: e.target.value })} />
+
+        {/* O — Objetivo */}
+        <div className="space-y-3 pt-3 border-t">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            O — Objetivo (examen clínico)
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="weight">Peso (kg)</Label>
+              <Input
+                id="weight"
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.weight}
+                onChange={(e) => setForm({ ...form, weight: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="temperature">Temperatura (°C)</Label>
+              <Input
+                id="temperature"
+                type="number"
+                step="0.1"
+                min="0"
+                value={form.temperature}
+                onChange={(e) => setForm({ ...form, temperature: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="heart_rate">FC (lpm)</Label>
+              <Input
+                id="heart_rate"
+                type="number"
+                min="0"
+                value={form.heart_rate}
+                onChange={(e) => setForm({ ...form, heart_rate: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="respiratory_rate">FR (rpm)</Label>
+              <Input
+                id="respiratory_rate"
+                type="number"
+                min="0"
+                value={form.respiratory_rate}
+                onChange={(e) => setForm({ ...form, respiratory_rate: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="pulse">Pulso</Label>
+              <Input
+                id="pulse"
+                value={form.pulse}
+                onChange={(e) => setForm({ ...form, pulse: e.target.value })}
+                placeholder="Ej. fuerte y regular"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="physical_exam">Examen físico</Label>
+            <Textarea
+              id="physical_exam"
+              rows={3}
+              value={form.physical_exam}
+              onChange={(e) => setForm({ ...form, physical_exam: e.target.value })}
+              placeholder="Exploración sistemática de órganos y sistemas..."
+            />
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="treatment">Tratamiento</Label>
-          <Textarea id="treatment" rows={2} value={form.treatment}
-            onChange={(e) => setForm({ ...form, treatment: e.target.value })} />
+
+        {/* A — Avalúo */}
+        <div className="space-y-3 pt-3 border-t">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            A — Avalúo (diagnóstico)
+          </p>
+          <div className="space-y-1.5">
+            <Label htmlFor="diagnosis">Diagnóstico presuntivo o definitivo</Label>
+            <Textarea id="diagnosis" rows={2} value={form.diagnosis}
+              onChange={(e) => setForm({ ...form, diagnosis: e.target.value })} />
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="prescriptions">Receta / Medicamentos</Label>
-          <Textarea id="prescriptions" rows={2} value={form.prescriptions}
-            onChange={(e) => setForm({ ...form, prescriptions: e.target.value })} />
+
+        {/* P — Plan */}
+        <div className="space-y-3 pt-3 border-t">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            P — Plan (tratamiento)
+          </p>
+          <div className="space-y-1.5">
+            <Label htmlFor="treatment">Tratamiento</Label>
+            <Textarea id="treatment" rows={2} value={form.treatment}
+              onChange={(e) => setForm({ ...form, treatment: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="prescriptions">Receta / Medicamentos</Label>
+            <Textarea
+              id="prescriptions"
+              rows={2}
+              value={form.prescriptions}
+              onChange={(e) => setForm({ ...form, prescriptions: e.target.value })}
+              placeholder="Medicamento, concentración, dosis, frecuencia, duración..."
+            />
+          </div>
         </div>
+
         {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
@@ -194,6 +290,16 @@ function formatDate(iso: string) {
 }
 
 function RecordCard({ record }: { record: MedicalRecord }) {
+  const [dewormingOpen, setDewormingOpen] = useState(false)
+  const [surgeryOpen, setSurgeryOpen] = useState(false)
+
+  const hasVitals =
+    record.weight != null ||
+    record.temperature != null ||
+    record.heart_rate != null ||
+    record.respiratory_rate != null ||
+    record.pulse != null
+
   return (
     <div className="rounded-lg border bg-card p-5 space-y-4 text-sm">
       {/* Header */}
@@ -202,41 +308,52 @@ function RecordCard({ record }: { record: MedicalRecord }) {
           <p className="font-semibold text-base">{formatDate(record.visit_date)}</p>
           <p className="text-muted-foreground">Atendido por {record.veterinarian_name}</p>
         </div>
-        {(record.weight != null || record.temperature != null) && (
-          <div className="text-right text-xs text-muted-foreground bg-muted/50 rounded px-3 py-1.5 shrink-0">
+        {hasVitals && (
+          <div className="text-right text-xs text-muted-foreground bg-muted/50 rounded px-3 py-1.5 shrink-0 space-y-0.5">
             {record.weight != null && <p>Peso: <span className="font-medium text-foreground">{record.weight} kg</span></p>}
             {record.temperature != null && <p>Temp: <span className="font-medium text-foreground">{record.temperature} °C</span></p>}
+            {record.heart_rate != null && <p>FC: <span className="font-medium text-foreground">{record.heart_rate} lpm</span></p>}
+            {record.respiratory_rate != null && <p>FR: <span className="font-medium text-foreground">{record.respiratory_rate} rpm</span></p>}
+            {record.pulse && <p>Pulso: <span className="font-medium text-foreground">{record.pulse}</span></p>}
           </div>
         )}
       </div>
 
-      {/* Motivo */}
+      {/* S — Motivo */}
       <div>
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Motivo</p>
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Motivo (S)</p>
         <p>{record.reason}</p>
       </div>
 
-      {/* Diagnóstico */}
+      {/* O — Examen físico */}
+      {record.physical_exam && (
+        <div>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Examen físico (O)</p>
+          <p className="whitespace-pre-line">{record.physical_exam}</p>
+        </div>
+      )}
+
+      {/* A — Diagnóstico */}
       {record.diagnosis && (
         <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Diagnóstico</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Diagnóstico (A)</p>
           <p>{record.diagnosis}</p>
         </div>
       )}
 
-      {/* Tratamiento */}
+      {/* P — Tratamiento */}
       {record.treatment && (
         <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Tratamiento</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Tratamiento (P)</p>
           <p>{record.treatment}</p>
         </div>
       )}
 
-      {/* Receta */}
+      {/* P — Receta */}
       {record.prescriptions && (
         <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Receta</p>
-          <p>{record.prescriptions}</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Receta (P)</p>
+          <p className="whitespace-pre-line">{record.prescriptions}</p>
         </div>
       )}
 
@@ -254,6 +371,57 @@ function RecordCard({ record }: { record: MedicalRecord }) {
                   {new Date(v.applied_at).toLocaleDateString("es")}
                   {v.next_dose_at && ` · próxima: ${new Date(v.next_dose_at).toLocaleDateString("es")}`}
                 </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Desparasitaciones */}
+      {record.dewormings.length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+            <Bug className="h-3.5 w-3.5" /> Desparasitaciones
+          </p>
+          <ul className="space-y-1">
+            {record.dewormings.map((d) => (
+              <li key={d.id} className="flex justify-between text-xs">
+                <span>
+                  <span className="font-medium">{d.product_name}</span>
+                  <span className="text-muted-foreground ml-2">
+                    ({d.treatment_type === "internal" ? "interna" : d.treatment_type === "external" ? "externa" : "ambas"})
+                  </span>
+                </span>
+                <span className="text-muted-foreground">
+                  {new Date(d.applied_at).toLocaleDateString("es")}
+                  {d.next_dose_at && ` · próxima: ${new Date(d.next_dose_at).toLocaleDateString("es")}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Cirugías */}
+      {record.surgeries.length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+            <Scissors className="h-3.5 w-3.5" /> Cirugías
+          </p>
+          <ul className="space-y-1">
+            {record.surgeries.map((s) => (
+              <li key={s.id} className="text-xs">
+                <div className="flex justify-between">
+                  <span className="font-medium">{s.name}</span>
+                  <span className="text-muted-foreground">
+                    {new Date(s.performed_at).toLocaleDateString("es")}
+                    {s.veterinarian_name && ` · ${s.veterinarian_name}`}
+                  </span>
+                </div>
+                {s.description && <p className="text-muted-foreground mt-0.5">{s.description}</p>}
+                {s.complications && (
+                  <p className="text-destructive mt-0.5">Complicaciones: {s.complications}</p>
+                )}
               </li>
             ))}
           </ul>
@@ -278,6 +446,33 @@ function RecordCard({ record }: { record: MedicalRecord }) {
           </ul>
         </div>
       )}
+
+      {/* Acciones */}
+      <div className="flex flex-wrap gap-2 pt-3 border-t">
+        <Button size="sm" variant="outline" onClick={() => setDewormingOpen(true)}>
+          <Bug className="h-3.5 w-3.5" />
+          Desparasitación
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => setSurgeryOpen(true)}>
+          <Scissors className="h-3.5 w-3.5" />
+          Cirugía
+        </Button>
+      </div>
+
+      <DewormingDialog
+        open={dewormingOpen}
+        onClose={() => setDewormingOpen(false)}
+        patientId={record.patient_id}
+        patientName={record.patient_name}
+        recordId={record.id}
+      />
+      <SurgeryDialog
+        open={surgeryOpen}
+        onClose={() => setSurgeryOpen(false)}
+        patientId={record.patient_id}
+        patientName={record.patient_name}
+        recordId={record.id}
+      />
     </div>
   )
 }
@@ -290,6 +485,8 @@ interface PatientHistoryViewProps {
 
 function PatientHistoryView({ patientId, onBack, onNewRecord }: PatientHistoryViewProps) {
   const api = useApiClient()
+  const [dewormingDialogOpen, setDewormingDialogOpen] = useState(false)
+  const [surgeryDialogOpen, setSurgeryDialogOpen] = useState(false)
 
   const { data: patient } = useQuery({
     queryKey: ["patient", patientId],
@@ -302,6 +499,20 @@ function PatientHistoryView({ patientId, onBack, onNewRecord }: PatientHistoryVi
       api.get<MedicalRecord[]>(`/medical-records?patient_id=${patientId}&limit=500`),
   })
 
+  const { data: allDewormings = [] } = useQuery({
+    queryKey: ["patient-dewormings", patientId],
+    queryFn: () => api.get<Deworming[]>(`/patients/${patientId}/dewormings`),
+  })
+
+  const { data: allSurgeries = [] } = useQuery({
+    queryKey: ["patient-surgeries", patientId],
+    queryFn: () => api.get<Surgery[]>(`/patients/${patientId}/surgeries`),
+  })
+
+  const standaloneDewormings = allDewormings.filter((d) => d.medical_record_id === null)
+  const standaloneSurgeries = allSurgeries.filter((s) => s.medical_record_id === null)
+  const hasAntecedentes = standaloneDewormings.length > 0 || standaloneSurgeries.length > 0
+
   const sorted = [...records].sort(
     (a, b) => new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime()
   )
@@ -309,7 +520,7 @@ function PatientHistoryView({ patientId, onBack, onNewRecord }: PatientHistoryVi
   return (
     <div className="space-y-6">
       {/* Cabecera */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <button
           onClick={onBack}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -317,10 +528,20 @@ function PatientHistoryView({ patientId, onBack, onNewRecord }: PatientHistoryVi
           <ArrowLeft className="h-4 w-4" />
           Todos los registros
         </button>
-        <Button onClick={onNewRecord}>
-          <Plus className="h-4 w-4" />
-          Nueva consulta
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setDewormingDialogOpen(true)}>
+            <Bug className="h-4 w-4" />
+            Desparasitación
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setSurgeryDialogOpen(true)}>
+            <Scissors className="h-4 w-4" />
+            Cirugía
+          </Button>
+          <Button onClick={onNewRecord}>
+            <Plus className="h-4 w-4" />
+            Nueva consulta
+          </Button>
+        </div>
       </div>
 
       {/* Ficha del paciente */}
@@ -353,6 +574,65 @@ function PatientHistoryView({ patientId, onBack, onNewRecord }: PatientHistoryVi
         </div>
       )}
 
+      {/* Antecedentes (registros sin consulta asociada) */}
+      {hasAntecedentes && (
+        <div className="rounded-lg border bg-card p-5 space-y-4 text-sm">
+          <p className="font-semibold text-base">Antecedentes (sin consulta asociada)</p>
+
+          {standaloneDewormings.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                <Bug className="h-3.5 w-3.5" /> Desparasitaciones
+              </p>
+              <ul className="space-y-1">
+                {standaloneDewormings.map((d) => (
+                  <li key={d.id} className="text-xs">
+                    <div className="flex justify-between">
+                      <span>
+                        <span className="font-medium">{d.product_name}</span>
+                        <span className="text-muted-foreground ml-2">
+                          ({d.treatment_type === "internal" ? "interna" : d.treatment_type === "external" ? "externa" : "ambas"})
+                        </span>
+                      </span>
+                      <span className="text-muted-foreground">
+                        {new Date(d.applied_at).toLocaleDateString("es")}
+                        {d.next_dose_at && ` · próxima: ${new Date(d.next_dose_at).toLocaleDateString("es")}`}
+                      </span>
+                    </div>
+                    {d.notes && <p className="text-muted-foreground mt-0.5">{d.notes}</p>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {standaloneSurgeries.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                <Scissors className="h-3.5 w-3.5" /> Cirugías
+              </p>
+              <ul className="space-y-1">
+                {standaloneSurgeries.map((s) => (
+                  <li key={s.id} className="text-xs">
+                    <div className="flex justify-between">
+                      <span className="font-medium">{s.name}</span>
+                      <span className="text-muted-foreground">
+                        {new Date(s.performed_at).toLocaleDateString("es")}
+                        {s.veterinarian_name && ` · ${s.veterinarian_name}`}
+                      </span>
+                    </div>
+                    {s.description && <p className="text-muted-foreground mt-0.5">{s.description}</p>}
+                    {s.complications && (
+                      <p className="text-destructive mt-0.5">Complicaciones: {s.complications}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Timeline */}
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Cargando historial...</p>
@@ -371,6 +651,20 @@ function PatientHistoryView({ patientId, onBack, onNewRecord }: PatientHistoryVi
           ))}
         </div>
       )}
+
+      {/* Dialogs */}
+      <DewormingDialog
+        open={dewormingDialogOpen}
+        onClose={() => setDewormingDialogOpen(false)}
+        patientId={patientId}
+        patientName={patient?.name}
+      />
+      <SurgeryDialog
+        open={surgeryDialogOpen}
+        onClose={() => setSurgeryDialogOpen(false)}
+        patientId={patientId}
+        patientName={patient?.name}
+      />
     </div>
   )
 }
