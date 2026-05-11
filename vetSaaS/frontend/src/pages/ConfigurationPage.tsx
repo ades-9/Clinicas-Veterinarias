@@ -254,12 +254,6 @@ const EMPTY_SERVICE: ServiceForm = {
   promo_price: "", promo_start: "", promo_end: "",
 }
 
-const SERVICE_TYPE_LABELS: Record<"veterinary" | "grooming" | "promotional", string> = {
-  veterinary: "Veterinaria",
-  grooming: "Estética",
-  promotional: "Promoción",
-}
-
 function ServicesSection() {
   const api = useApiClient()
   const queryClient = useQueryClient()
