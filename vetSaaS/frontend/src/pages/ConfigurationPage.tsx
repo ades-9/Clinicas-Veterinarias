@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Pencil, Plus, Trash2 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { Camera, Copy, ImagePlus, Pencil, Plus, Trash2, UserPlus } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 import { useApiClient } from "@/api/client"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,8 @@ import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
-import type { AppointmentService, Clinic } from "@/types"
+import type { AppointmentService, Clinic, Role, ServiceType, User, UserArea } from "@/types"
+import { SERVICE_TYPE_LABELS } from "@/types"
 
 // ── Sección datos de la clínica ─────────────────────────────────────────────
 
@@ -23,6 +24,7 @@ interface ClinicForm {
 function ClinicSection() {
   const api = useApiClient()
   const queryClient = useQueryClient()
+  const logoInputRef = useRef<HTMLInputElement>(null)
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<ClinicForm>({
     name: "",
@@ -32,6 +34,18 @@ function ClinicSection() {
     tax_id: "",
   })
   const [error, setError] = useState("")
+
+  const logoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData()
+      formData.append("file", file)
+      return api.upload<Clinic>("/configuration/logo", formData)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["configuration"] })
+    },
+    onError: (e: Error) => setError(e.message),
+  })
 
   const { data: clinic, isLoading } = useQuery({
     queryKey: ["configuration"],
@@ -86,7 +100,50 @@ function ClinicSection() {
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Cargando...</p>
-      ) : editing ? (
+      ) : (
+        <>
+          {/* Logo */}
+          <div className="flex items-center gap-4 pb-4 border-b">
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) logoMutation.mutate(file)
+                e.target.value = ""
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => logoInputRef.current?.click()}
+              disabled={logoMutation.isPending}
+              className="group relative h-20 w-20 rounded-lg border-2 border-dashed bg-muted overflow-hidden flex items-center justify-center hover:border-primary transition-colors disabled:opacity-60"
+              title={clinic?.logo_url ? "Cambiar logo" : "Subir logo"}
+            >
+              {clinic?.logo_url ? (
+                <>
+                  <img src={clinic.logo_url} alt="Logo" className="h-full w-full object-contain" />
+                  <span className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                    <Camera className="h-5 w-5 text-white" />
+                  </span>
+                </>
+              ) : (
+                <span className="flex flex-col items-center text-muted-foreground text-[10px]">
+                  <ImagePlus className="h-5 w-5 mb-0.5" />
+                  {logoMutation.isPending ? "Subiendo..." : "Subir logo"}
+                </span>
+              )}
+            </button>
+            <div className="text-xs text-muted-foreground">
+              <p className="font-medium text-foreground mb-1">Logo de la clínica</p>
+              <p>Aparece en el carnet sanitario y otros documentos imprimibles.</p>
+              <p>PNG, JPEG o WebP.</p>
+            </div>
+          </div>
+
+          {editing ? (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2 space-y-1.5">
@@ -173,6 +230,8 @@ function ClinicSection() {
             <p className="font-medium mt-0.5">{clinic?.address ?? "—"}</p>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   )
@@ -526,6 +585,354 @@ function ServicesSection() {
   )
 }
 
+// ── Sección de usuarios, roles y áreas ──────────────────────────────────────
+
+const AREA_OPTIONS: ServiceType[] = ["veterinary", "grooming", "aesthetic"]
+
+interface NewUserForm {
+  full_name: string
+  email: string
+  role_id: string
+  areas: UserArea[]
+}
+
+const EMPTY_NEW_USER: NewUserForm = {
+  full_name: "", email: "", role_id: "", areas: [],
+}
+
+function UsersSection() {
+  const api = useApiClient()
+  const qc = useQueryClient()
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editAreas, setEditAreas] = useState<UserArea[]>([])
+  const [editRoleId, setEditRoleId] = useState("")
+  const [error, setError] = useState("")
+  // Nuevo usuario
+  const [newOpen, setNewOpen] = useState(false)
+  const [newForm, setNewForm] = useState<NewUserForm>(EMPTY_NEW_USER)
+  const [newError, setNewError] = useState("")
+  // Password temp post-creación
+  const [createdResult, setCreatedResult] = useState<{
+    user: User
+    temporary_password: string
+  } | null>(null)
+
+  const { data: users = [], isLoading } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => api.get<User[]>("/users"),
+    staleTime: 30_000,
+  })
+
+  const { data: roles = [] } = useQuery({
+    queryKey: ["roles"],
+    queryFn: () => api.get<Role[]>("/roles"),
+    staleTime: Infinity,
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: object }) =>
+      api.patch<User>(`/users/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["users"] })
+      setEditingId(null)
+      setError("")
+    },
+    onError: (e: Error) => setError(e.message),
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (data: object) =>
+      api.post<{ user: User; temporary_password: string }>("/users", data),
+    onSuccess: (resp) => {
+      qc.invalidateQueries({ queryKey: ["users"] })
+      setNewOpen(false)
+      setNewForm(EMPTY_NEW_USER)
+      setNewError("")
+      setCreatedResult(resp)
+    },
+    onError: (e: Error) => setNewError(e.message),
+  })
+
+  function startEdit(u: User) {
+    setEditingId(u.id)
+    setEditAreas([...u.areas])
+    setEditRoleId(u.role_id)
+    setError("")
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditAreas([])
+    setEditRoleId("")
+    setError("")
+  }
+
+  function toggleArea(area: UserArea, target: "edit" | "new") {
+    if (target === "edit") {
+      setEditAreas((prev) =>
+        prev.includes(area) ? prev.filter((a) => a !== area) : [...prev, area]
+      )
+    } else {
+      setNewForm((prev) => ({
+        ...prev,
+        areas: prev.areas.includes(area)
+          ? prev.areas.filter((a) => a !== area)
+          : [...prev.areas, area],
+      }))
+    }
+  }
+
+  function saveEdit() {
+    if (!editingId) return
+    updateMutation.mutate({
+      id: editingId,
+      data: { areas: editAreas, role_id: editRoleId },
+    })
+  }
+
+  function handleCreate(e: React.FormEvent) {
+    e.preventDefault()
+    setNewError("")
+    if (!newForm.full_name.trim()) { setNewError("Nombre requerido"); return }
+    if (!newForm.email.trim()) { setNewError("Email requerido"); return }
+    if (!newForm.role_id) { setNewError("Seleccioná un rol"); return }
+    createMutation.mutate({
+      full_name: newForm.full_name,
+      email: newForm.email,
+      role_id: newForm.role_id,
+      areas: newForm.areas,
+    })
+  }
+
+  async function copyPassword() {
+    if (!createdResult) return
+    try {
+      await navigator.clipboard.writeText(createdResult.temporary_password)
+    } catch {
+      // Si falla el clipboard, no pasa nada — el usuario ve la password en pantalla
+    }
+  }
+
+  return (
+    <div className="rounded-lg border bg-card p-6 space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold">Usuarios, roles y áreas</h2>
+          <p className="text-sm text-muted-foreground">
+            Asigná rol y áreas a cada profesional. Sin áreas, el usuario puede asignarse a citas
+            de cualquier área.
+          </p>
+        </div>
+        <Button size="sm" onClick={() => { setNewForm(EMPTY_NEW_USER); setNewOpen(true); setNewError("") }}>
+          <UserPlus className="h-4 w-4" />
+          Nuevo usuario
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Cargando...</p>
+      ) : (
+        <div className="rounded-md border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="border-b bg-muted/50">
+              <tr>
+                <th className="text-left px-4 py-2 font-medium text-muted-foreground">Nombre</th>
+                <th className="text-left px-4 py-2 font-medium text-muted-foreground">Email</th>
+                <th className="text-left px-4 py-2 font-medium text-muted-foreground">Rol</th>
+                <th className="text-left px-4 py-2 font-medium text-muted-foreground">Áreas</th>
+                <th className="px-4 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => {
+                const isEditing = editingId === u.id
+                return (
+                  <tr key={u.id} className="border-b last:border-0">
+                    <td className="px-4 py-2 font-medium">{u.full_name}</td>
+                    <td className="px-4 py-2 text-muted-foreground text-xs">{u.email}</td>
+                    <td className="px-4 py-2">
+                      {isEditing ? (
+                        <Select
+                          value={editRoleId}
+                          onChange={(e) => setEditRoleId(e.target.value)}
+                        >
+                          {roles.map((r) => (
+                            <option key={r.id} value={r.id}>{r.name}</option>
+                          ))}
+                        </Select>
+                      ) : (
+                        <span className="text-muted-foreground capitalize">{u.role_name}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2">
+                      {isEditing ? (
+                        <div className="flex flex-wrap gap-2">
+                          {AREA_OPTIONS.map((area) => (
+                            <label
+                              key={area}
+                              className="flex items-center gap-1.5 text-xs cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={editAreas.includes(area)}
+                                onChange={() => toggleArea(area, "edit")}
+                              />
+                              {SERVICE_TYPE_LABELS[area]}
+                            </label>
+                          ))}
+                        </div>
+                      ) : u.areas.length === 0 ? (
+                        <span className="text-xs text-muted-foreground italic">Todas</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {u.areas.map((a) => (
+                            <Badge key={a} variant="secondary" className="text-xs">
+                              {SERVICE_TYPE_LABELS[a]}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {isEditing ? (
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={cancelEdit}
+                            disabled={updateMutation.isPending}
+                          >
+                            Cancelar
+                          </Button>
+                          <Button size="sm" onClick={saveEdit} disabled={updateMutation.isPending}>
+                            {updateMutation.isPending ? "Guardando..." : "Guardar"}
+                          </Button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => startEdit(u)}
+                          className="rounded p-1.5 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                          title="Editar rol y áreas"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {/* Dialog: Nuevo usuario */}
+      <Dialog open={newOpen} onClose={() => setNewOpen(false)} title="Nuevo usuario" className="max-w-md">
+        <form onSubmit={handleCreate} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="nu_name">Nombre completo *</Label>
+            <Input
+              id="nu_name"
+              required
+              value={newForm.full_name}
+              onChange={(e) => setNewForm({ ...newForm, full_name: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="nu_email">Email *</Label>
+            <Input
+              id="nu_email"
+              type="email"
+              required
+              value={newForm.email}
+              onChange={(e) => setNewForm({ ...newForm, email: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="nu_role">Rol *</Label>
+            <Select
+              id="nu_role"
+              required
+              value={newForm.role_id}
+              onChange={(e) => setNewForm({ ...newForm, role_id: e.target.value })}
+            >
+              <option value="">Seleccionar rol...</option>
+              {roles.map((r) => (
+                <option key={r.id} value={r.id} className="capitalize">{r.name}</option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Áreas (opcional)</Label>
+            <div className="flex flex-wrap gap-3">
+              {AREA_OPTIONS.map((area) => (
+                <label key={area} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newForm.areas.includes(area)}
+                    onChange={() => toggleArea(area, "new")}
+                  />
+                  {SERVICE_TYPE_LABELS[area]}
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Sin áreas marcadas, el usuario puede atender en cualquier área.
+            </p>
+          </div>
+          {newError && <p className="text-sm text-destructive">{newError}</p>}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setNewOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={createMutation.isPending}>
+              {createMutation.isPending ? "Creando..." : "Crear usuario"}
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* Dialog: password temporal post-creación */}
+      <Dialog
+        open={createdResult !== null}
+        onClose={() => setCreatedResult(null)}
+        title="Usuario creado"
+        className="max-w-md"
+      >
+        {createdResult && (
+          <div className="space-y-4">
+            <p className="text-sm">
+              <span className="font-semibold">{createdResult.user.full_name}</span> ya tiene cuenta
+              en Clerk con email <code className="text-xs">{createdResult.user.email}</code>.
+            </p>
+            <div className="rounded-md bg-amber-50 border border-amber-200 px-4 py-3 space-y-2">
+              <p className="text-xs text-amber-800 font-medium">
+                Compartí esta contraseña temporal con la persona. Solo se muestra una vez:
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 px-3 py-2 bg-white rounded border text-sm font-mono break-all">
+                  {createdResult.temporary_password}
+                </code>
+                <Button type="button" size="sm" variant="outline" onClick={copyPassword}>
+                  <Copy className="h-3.5 w-3.5" />
+                  Copiar
+                </Button>
+              </div>
+              <p className="text-xs text-amber-800">
+                Indicá al usuario que ingrese en la app y cambie su contraseña desde su perfil.
+              </p>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={() => setCreatedResult(null)}>Listo</Button>
+            </div>
+          </div>
+        )}
+      </Dialog>
+    </div>
+  )
+}
+
 // ── Página principal ─────────────────────────────────────────────────────────
 
 export function ConfigurationPage() {
@@ -536,6 +943,7 @@ export function ConfigurationPage() {
         <p className="text-sm text-muted-foreground">Ajustes generales de la clínica</p>
       </div>
       <ClinicSection />
+      <UsersSection />
       <ServicesSection />
     </div>
   )

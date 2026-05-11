@@ -15,6 +15,41 @@ _ALL_MODULES = [
     "products", "sales", "reports",
 ]
 
+# Roles default que se crean en cada clínica nueva (además de admin)
+_DEFAULT_ROLE_PERMISSIONS = {
+    "recepcionista": [
+        "owners.view", "owners.create", "owners.edit",
+        "patients.view", "patients.create", "patients.edit",
+        "appointments.view_all", "appointments.create", "appointments.edit", "appointments.cancel",
+        "medical_records.view",
+        "products.view",
+        "sales.view", "sales.create", "sales.cancel",
+    ],
+    "veterinario": [
+        "owners.view",
+        "patients.view", "patients.create", "patients.edit",
+        "appointments.view_own", "appointments.edit",
+        "medical_records.view", "medical_records.create", "medical_records.edit",
+        "products.view",
+        "sales.view", "sales.create",
+        "reports.view_own",
+    ],
+    "groomer": [
+        "owners.view",
+        "patients.view",
+        "appointments.view_own", "appointments.edit",
+        "products.view",
+        "sales.view",
+    ],
+    "esteticista": [
+        "owners.view",
+        "patients.view",
+        "appointments.view_own", "appointments.edit",
+        "products.view",
+        "sales.view",
+    ],
+}
+
 
 class RegisterRequest(BaseModel):
     clinic_name: str
@@ -60,6 +95,21 @@ async def register_clinic(
         text("INSERT INTO role_permissions (role_id, permission_id) SELECT :role_id, id FROM permissions"),
         {"role_id": role_id},
     )
+
+    # Crear roles default adicionales con sus permisos
+    for default_role_name, perms in _DEFAULT_ROLE_PERMISSIONS.items():
+        r = await session.execute(
+            text("INSERT INTO roles (clinic_id, name) VALUES (:clinic_id, :name) RETURNING id"),
+            {"clinic_id": clinic_id, "name": default_role_name},
+        )
+        new_role_id = str(r.scalar_one())
+        await session.execute(
+            text("""
+                INSERT INTO role_permissions (role_id, permission_id)
+                SELECT :role_id, id FROM permissions WHERE action = ANY(:perms)
+            """),
+            {"role_id": new_role_id, "perms": perms},
+        )
 
     user_row = await session.execute(
         text("""

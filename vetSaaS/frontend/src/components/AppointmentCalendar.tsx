@@ -166,15 +166,25 @@ function ApptBlock({
   const time = new Date(appt.scheduled_at).toLocaleTimeString("es", { timeStyle: "short" })
 
   return (
-    <div className="group rounded-md border bg-background p-1.5 text-xs hover:shadow-sm transition-shadow">
+    <div
+      className={`group rounded-md border bg-background p-1.5 text-xs hover:shadow-sm transition-shadow ${
+        appt.is_emergency ? "border-destructive bg-destructive/5" : ""
+      }`}
+    >
       <div className="flex items-center justify-between gap-1 mb-1">
         <span className="text-muted-foreground font-medium">{time}</span>
-        <Badge variant={STATUS_VARIANT[appt.status]} className="text-[10px] px-1 py-0">
-          {STATUS_LABELS[appt.status]}
-        </Badge>
+        {appt.is_emergency ? (
+          <Badge variant="destructive" className="text-[10px] px-1 py-0">
+            🚨 EMERG
+          </Badge>
+        ) : (
+          <Badge variant={STATUS_VARIANT[appt.status]} className="text-[10px] px-1 py-0">
+            {STATUS_LABELS[appt.status]}
+          </Badge>
+        )}
       </div>
       <p className="font-medium truncate">{appt.patient_name}</p>
-      <p className="text-muted-foreground truncate">{appt.service_name}</p>
+      <p className="text-muted-foreground truncate">{appt.services.map((s) => s.name).join(" + ")}</p>
 
       {/* Actions — visible on hover */}
       <div className="flex gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">

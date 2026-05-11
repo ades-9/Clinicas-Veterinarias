@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import type { Owner, Patient } from "@/types"
 
-// ── Búsqueda de paciente con creación inline ─────────────────────────────────
+// ── Búsqueda de mascota con creación inline ─────────────────────────────────
 
 interface PatientSearchProps {
   value: Patient | null
@@ -81,7 +81,7 @@ export function PatientSearch({ value, onChange }: PatientSearchProps) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
             className="pl-9"
-            placeholder="Buscar paciente por nombre o propietario..."
+            placeholder="Buscar mascota por nombre o propietario..."
             value={query}
             onFocus={() => setOpen(true)}
             onChange={(e) => {
@@ -118,7 +118,7 @@ export function PatientSearch({ value, onChange }: PatientSearchProps) {
           type="button"
           variant="outline"
           size="icon"
-          title="Crear nuevo paciente"
+          title="Crear nuevo mascota"
           onClick={() => setNewOpen(true)}
         >
           <Plus className="h-4 w-4" />
@@ -137,7 +137,7 @@ export function PatientSearch({ value, onChange }: PatientSearchProps) {
   )
 }
 
-// ── Crear paciente (sin salir del modal de cita) ──────────────────────────────
+// ── Crear mascota (sin salir del modal de cita) ──────────────────────────────
 
 interface NewPatientDialogProps {
   open: boolean
@@ -196,7 +196,7 @@ function NewPatientDialog({ open, onClose, onCreated }: NewPatientDialogProps) {
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} title="Nuevo paciente" className="max-w-sm">
+    <Dialog open={open} onClose={handleClose} title="Nuevo mascota" className="max-w-sm">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-1.5">
           <Label>Propietario *</Label>
@@ -259,7 +259,7 @@ function NewPatientDialog({ open, onClose, onCreated }: NewPatientDialogProps) {
             Cancelar
           </Button>
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? "Creando..." : "Crear paciente"}
+            {mutation.isPending ? "Creando..." : "Crear mascota"}
           </Button>
         </div>
       </form>
@@ -277,7 +277,7 @@ function NewPatientDialog({ open, onClose, onCreated }: NewPatientDialogProps) {
   )
 }
 
-// ── Crear propietario (sin salir del flujo de cita → paciente) ────────────────
+// ── Crear propietario (sin salir del flujo de cita → mascota) ────────────────
 
 interface NewOwnerDialogProps {
   open: boolean

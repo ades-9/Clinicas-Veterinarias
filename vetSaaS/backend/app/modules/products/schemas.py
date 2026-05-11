@@ -37,6 +37,7 @@ class ProductRead(BaseModel):
     stock: Decimal
     min_stock: Decimal
     is_active: bool
+    is_medication: bool
     created_at: datetime
 
 
@@ -49,6 +50,7 @@ class ProductCreate(BaseModel):
     price: Decimal
     cost: Decimal | None = None
     min_stock: Decimal = Decimal("0")
+    is_medication: bool = False
 
 
 class ProductUpdate(BaseModel):
@@ -61,6 +63,7 @@ class ProductUpdate(BaseModel):
     cost: Decimal | None = None
     min_stock: Decimal | None = None
     is_active: bool | None = None
+    is_medication: bool | None = None
 
 
 class StockMovementRead(BaseModel):

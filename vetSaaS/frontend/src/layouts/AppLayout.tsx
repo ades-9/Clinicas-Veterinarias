@@ -1,5 +1,6 @@
 import { UserButton } from "@clerk/clerk-react"
 import {
+  BarChart3,
   Calendar,
   ClipboardList,
   Cog,
@@ -16,11 +17,12 @@ import { cn } from "@/lib/utils"
 const NAV_ITEMS = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/owners", icon: Users, label: "Propietarios" },
-  { to: "/patients", icon: PawPrint, label: "Pacientes" },
+  { to: "/patients", icon: PawPrint, label: "Mascotas" },
   { to: "/appointments", icon: Calendar, label: "Citas" },
   { to: "/medical-records", icon: Stethoscope, label: "Historia Clínica" },
   { to: "/products", icon: Package, label: "Inventario" },
   { to: "/sales", icon: ShoppingCart, label: "Ventas" },
+  { to: "/reports", icon: BarChart3, label: "Reportes" },
   { to: "/configuration", icon: Cog, label: "Configuración" },
 ]
 

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { CalendarDays, List, Pencil, PlayCircle, Plus, User as UserIcon, PawPrint, Stethoscope, XCircle } from "lucide-react"
-import { useMemo, useState } from "react"
+import { CalendarDays, List, Pencil, PlayCircle, Plus, User as UserIcon, PawPrint, Stethoscope, X, XCircle } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { useApiClient } from "@/api/client"
 import { AppointmentCalendar, getWeekStart, addDays } from "@/components/AppointmentCalendar"
 import { AssigneeCombobox } from "@/components/AssigneeCombobox"
@@ -21,8 +22,10 @@ import type {
   AppointmentStatus,
   Owner,
   Patient,
+  ServiceType,
   User,
 } from "@/types"
+import { SERVICE_TYPE_LABELS } from "@/types"
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -52,15 +55,17 @@ function toISOLocal(date: Date) {
 // ── Form types ────────────────────────────────────────────────────────────────
 
 interface ApptForm {
-  service_id: string
-  date: string         // YYYY-MM-DD
-  time: string         // HH:MM
+  area: ServiceType | ""        // se selecciona primero; filtra servicios y profesionales
+  service_ids: string[]         // multi: todos del mismo área
+  date: string                  // YYYY-MM-DD
+  time: string                  // HH:MM
   status: AppointmentStatus | ""
   notes: string
 }
 
 const EMPTY: ApptForm = {
-  service_id: "",
+  area: "",
+  service_ids: [],
   date: "",
   time: "",
   status: "",
@@ -164,21 +169,51 @@ export function AppointmentsPage() {
     queryClient.invalidateQueries({ queryKey: ["appointments-day"] })
   }
 
-  const selectedService = useMemo(
-    () => services.find((s) => s.id === form.service_id) ?? null,
-    [services, form.service_id]
+  const selectedServices = useMemo(
+    () => services.filter((s) => form.service_ids.includes(s.id)),
+    [services, form.service_ids]
   )
-  const duration = selectedService?.duration_minutes ?? 0
+  const duration = selectedServices.reduce((acc, s) => acc + s.duration_minutes, 0)
   const endTime = computeEndTime(form.time, duration)
   const newStartISO = form.date && form.time ? `${form.date}T${form.time}:00` : null
+
+  // Servicios disponibles según el área seleccionada
+  const servicesInArea = useMemo(
+    () => (form.area ? services.filter((s) => s.service_type === form.area) : []),
+    [services, form.area]
+  )
+
+  // Profesionales del área seleccionada (areas vacío = sin restricción → puede cualquiera)
+  const usersInArea = useMemo(
+    () => (form.area ? users.filter((u) => u.areas.length === 0 || u.areas.includes(form.area as ServiceType)) : users),
+    [users, form.area]
+  )
+
+  function toggleService(serviceId: string) {
+    setForm((f) => {
+      const has = f.service_ids.includes(serviceId)
+      return {
+        ...f,
+        service_ids: has ? f.service_ids.filter((id) => id !== serviceId) : [...f.service_ids, serviceId],
+      }
+    })
+  }
+
+  function handleAreaChange(area: ServiceType | "") {
+    setForm((f) => ({ ...f, area, service_ids: [] }))
+    // Si el profesional seleccionado no trabaja en esa área, lo limpiamos
+    if (selectedAssignee && area && selectedAssignee.areas.length > 0 && !selectedAssignee.areas.includes(area)) {
+      setSelectedAssignee(null)
+    }
+  }
 
   const createMutation = useMutation({
     mutationFn: (data: object) => api.post<Appointment>("/appointments", data),
     onSuccess: () => {
       invalidateAll()
-      setJustCreated({ patientName: selectedPatient?.name ?? "el paciente" })
-      // Keep owner+patient+date for quick second booking; reset service/time/assignee/notes
-      setForm((f) => ({ ...f, service_id: "", time: "", notes: "", status: "" }))
+      setJustCreated({ patientName: selectedPatient?.name ?? "la mascota" })
+      // Keep owner+patient+date+area for quick second booking; reset services/time/assignee/notes
+      setForm((f) => ({ ...f, service_ids: [], time: "", notes: "", status: "" }))
       setSelectedAssignee(null)
       setShowNotes(false)
       setError("")
@@ -199,17 +234,49 @@ export function AppointmentsPage() {
     onError: (e: Error) => setError(e.message),
   })
 
-  function openCreate() {
+  function openCreate(preset?: { date?: string; area?: ServiceType }) {
     setEditing(null)
     setSelectedOwner(null)
     setSelectedPatient(null)
     setSelectedAssignee(null)
     setShowNotes(false)
-    setForm({ ...EMPTY, date: new Date().toLocaleDateString("en-CA") })
+    setForm({
+      ...EMPTY,
+      date: preset?.date ?? new Date().toLocaleDateString("en-CA"),
+      area: preset?.area ?? "",
+    })
     setError("")
     setJustCreated(null)
     setFormOpen(true)
   }
+
+  // Pre-fill desde query params: /appointments?new=1&patient_id=...&owner_id=...&area=...&date=...
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get("new") !== "1") return
+
+    const patientId = searchParams.get("patient_id")
+    const ownerId = searchParams.get("owner_id")
+    const area = searchParams.get("area") as ServiceType | null
+    const date = searchParams.get("date") || undefined
+
+    openCreate({
+      date,
+      area: area && ["veterinary", "grooming", "aesthetic"].includes(area) ? area : undefined,
+    })
+
+    // Resolver el paciente y propietario por API si vinieron sus IDs
+    if (patientId) {
+      api.get<Patient>(`/patients/${patientId}`).then((p) => setSelectedPatient(p))
+    }
+    if (ownerId) {
+      api.get<Owner>(`/owners/${ownerId}`).then((o) => setSelectedOwner(o))
+    }
+
+    // Limpiar query params para no reabrir si recargan
+    setSearchParams({}, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function openEdit(appt: Appointment) {
     setEditing(appt)
@@ -220,7 +287,8 @@ export function AppointmentsPage() {
     setJustCreated(null)
     const d = new Date(appt.scheduled_at)
     setForm({
-      service_id: appt.service_id,
+      area: appt.service_type,
+      service_ids: appt.services.map((s) => s.id),
       date: d.toLocaleDateString("en-CA"),
       time: `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`,
       status: appt.status,
@@ -252,8 +320,16 @@ export function AppointmentsPage() {
     e.preventDefault()
     setError("")
     const scheduledAt = form.date && form.time ? `${form.date}T${form.time}:00` : ""
-    if (!form.service_id) { setError("Selecciona un servicio"); return }
+    if (!form.area) { setError("Selecciona un área"); return }
+    if (form.service_ids.length === 0) { setError("Selecciona al menos un servicio"); return }
     if (!scheduledAt) { setError("Selecciona fecha y hora"); return }
+
+    // Validación: no permitir fecha/hora pasada (tolerancia 1 min)
+    const scheduledDate = new Date(scheduledAt)
+    if (scheduledDate.getTime() < Date.now() - 60_000) {
+      setError("La cita no puede tener fecha y hora anterior a la actual")
+      return
+    }
 
     if (editing) {
       if (!selectedAssignee && !editing.assigned_user_id) {
@@ -264,7 +340,7 @@ export function AppointmentsPage() {
         id: editing.id,
         data: {
           assigned_user_id: selectedAssignee?.id ?? editing.assigned_user_id,
-          service_id: form.service_id,
+          service_ids: form.service_ids,
           scheduled_at: scheduledAt,
           status: form.status || undefined,
           notes: form.notes || null,
@@ -272,13 +348,13 @@ export function AppointmentsPage() {
       })
     } else {
       if (!selectedOwner) { setError("Selecciona un propietario"); return }
-      if (!selectedPatient) { setError("Selecciona un paciente"); return }
+      if (!selectedPatient) { setError("Selecciona una mascota"); return }
       if (!selectedAssignee) { setError("Selecciona un profesional"); return }
       createMutation.mutate({
         patient_id: selectedPatient.id,
         owner_id: selectedOwner.id,
         assigned_user_id: selectedAssignee.id,
-        service_id: form.service_id,
+        service_ids: form.service_ids,
         scheduled_at: scheduledAt,
         notes: form.notes || null,
       })
@@ -363,7 +439,7 @@ export function AppointmentsPage() {
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Paciente</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Mascota</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Propietario</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Servicio</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Fecha y hora</th>
@@ -391,9 +467,18 @@ export function AppointmentsPage() {
                     key={appt.id}
                     className="border-b last:border-0 hover:bg-muted/30 transition-colors"
                   >
-                    <td className="px-4 py-3 font-medium">{appt.patient_name}</td>
+                    <td className="px-4 py-3 font-medium">
+                      {appt.is_emergency && (
+                        <span className="inline-flex items-center gap-1 mr-2 text-xs px-1.5 py-0.5 rounded bg-destructive/15 text-destructive font-semibold">
+                          🚨 Emergencia
+                        </span>
+                      )}
+                      {appt.patient_name}
+                    </td>
                     <td className="px-4 py-3 text-muted-foreground">{appt.owner_name}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{appt.service_name}</td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {appt.services.map((s) => s.name).join(" + ")}
+                    </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {new Date(appt.scheduled_at).toLocaleString("es", {
                         dateStyle: "short",
@@ -471,31 +556,64 @@ export function AppointmentsPage() {
 
         <form onSubmit={handleSubmit}>
           {editing ? (
-            // ── EDIT MODE: form simple (no se puede cambiar paciente/owner) ─────
+            // ── EDIT MODE: form simple (no se puede cambiar mascota/owner) ─────
             <div className="space-y-4">
               <div className="rounded-md bg-muted/50 px-3 py-2 text-sm">
-                <span className="text-muted-foreground">Paciente: </span>
+                <span className="text-muted-foreground">Mascota: </span>
                 <span className="font-medium">{editing.patient_name}</span>
                 <span className="text-muted-foreground ml-3">Propietario: </span>
                 <span className="font-medium">{editing.owner_name}</span>
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="e_service">Servicio *</Label>
+                <Label htmlFor="e_area">Área *</Label>
                 <Select
-                  id="e_service"
+                  id="e_area"
                   required
-                  value={form.service_id}
-                  onChange={(e) => setForm({ ...form, service_id: e.target.value })}
+                  value={form.area}
+                  onChange={(e) => handleAreaChange(e.target.value as ServiceType | "")}
                 >
-                  <option value="">Seleccionar servicio...</option>
-                  {services.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.duration_minutes} min)
-                    </option>
-                  ))}
+                  <option value="">Seleccionar área...</option>
+                  <option value="veterinary">Veterinaria</option>
+                  <option value="grooming">Peluquería</option>
+                  <option value="aesthetic">Estética</option>
                 </Select>
               </div>
+
+              {form.area && (
+                <div className="space-y-1.5">
+                  <Label>Servicios * (uno o más)</Label>
+                  <div className="rounded-md border divide-y max-h-48 overflow-y-auto">
+                    {servicesInArea.length === 0 ? (
+                      <p className="px-3 py-2 text-sm text-muted-foreground">
+                        No hay servicios configurados para esta área
+                      </p>
+                    ) : (
+                      servicesInArea.map((s) => {
+                        const checked = form.service_ids.includes(s.id)
+                        return (
+                          <label
+                            key={s.id}
+                            className="flex items-center gap-3 px-3 py-2 hover:bg-muted/30 cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleService(s.id)}
+                            />
+                            <span className="flex-1 text-sm">
+                              {s.name}{" "}
+                              <span className="text-xs text-muted-foreground">
+                                ({s.duration_minutes} min)
+                              </span>
+                            </span>
+                          </label>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <Label htmlFor="e_assignee">Profesional *</Label>
@@ -508,7 +626,7 @@ export function AppointmentsPage() {
                     setSelectedAssignee(u ?? null)
                   }}
                 >
-                  {users.map((u) => (
+                  {usersInArea.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.full_name} ({u.role_name})
                     </option>
@@ -574,22 +692,77 @@ export function AppointmentsPage() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Detalles
                   </p>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="c_service">Servicio *</Label>
-                    <Select
-                      id="c_service"
-                      required
-                      value={form.service_id}
-                      onChange={(e) => setForm({ ...form, service_id: e.target.value })}
-                    >
-                      <option value="">Seleccionar servicio...</option>
-                      {services.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} ({s.duration_minutes} min)
-                        </option>
-                      ))}
-                    </Select>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="c_area">Área *</Label>
+                      <Select
+                        id="c_area"
+                        required
+                        value={form.area}
+                        onChange={(e) => handleAreaChange(e.target.value as ServiceType | "")}
+                      >
+                        <option value="">Seleccionar área...</option>
+                        <option value="veterinary">Veterinaria</option>
+                        <option value="grooming">Peluquería</option>
+                        <option value="aesthetic">Estética</option>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Duración total</Label>
+                      <div className="h-9 px-3 rounded-md border border-input bg-muted/30 flex items-center text-sm text-muted-foreground">
+                        {duration ? `${duration} min` : "—"}
+                      </div>
+                    </div>
                   </div>
+
+                  {form.area && (
+                    <div className="space-y-1.5">
+                      <Label>Servicios * (uno o más)</Label>
+                      {selectedServices.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {selectedServices.map((s) => (
+                            <span
+                              key={s.id}
+                              className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs"
+                            >
+                              {s.name}
+                              <button
+                                type="button"
+                                onClick={() => toggleService(s.id)}
+                                className="hover:text-destructive"
+                                aria-label={`Quitar ${s.name}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="rounded-md border divide-y max-h-40 overflow-y-auto">
+                        {servicesInArea.length === 0 ? (
+                          <p className="px-3 py-2 text-sm text-muted-foreground">
+                            No hay servicios configurados para esta área
+                          </p>
+                        ) : (
+                          servicesInArea
+                            .filter((s) => !form.service_ids.includes(s.id))
+                            .map((s) => (
+                              <button
+                                type="button"
+                                key={s.id}
+                                onClick={() => toggleService(s.id)}
+                                className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted/30 text-left"
+                              >
+                                <span className="text-sm">{s.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {s.duration_minutes} min
+                                </span>
+                              </button>
+                            ))
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1.5">
@@ -619,6 +792,13 @@ export function AppointmentsPage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Mensaje si no hay área seleccionada */}
+                  {!form.area && (
+                    <p className="text-xs text-muted-foreground">
+                      Seleccioná un área para ver los servicios disponibles.
+                    </p>
+                  )}
 
                   {!showNotes ? (
                     <button
@@ -659,7 +839,7 @@ export function AppointmentsPage() {
                   <div className="space-y-1.5">
                     <Label className="flex items-center gap-1.5">
                       <PawPrint className="h-3.5 w-3.5 text-muted-foreground" />
-                      Paciente *
+                      Mascota *
                     </Label>
                     <PatientCombobox
                       ownerId={selectedOwner?.id ?? null}
@@ -673,7 +853,11 @@ export function AppointmentsPage() {
                       <Stethoscope className="h-3.5 w-3.5 text-muted-foreground" />
                       Profesional *
                     </Label>
-                    <AssigneeCombobox value={selectedAssignee} onChange={setSelectedAssignee} />
+                    <AssigneeCombobox
+                      value={selectedAssignee}
+                      onChange={setSelectedAssignee}
+                      areaFilter={form.area || null}
+                    />
                   </div>
                 </div>
               </div>
@@ -689,7 +873,7 @@ export function AppointmentsPage() {
                     newDurationMinutes={duration || null}
                     existingAppointments={dayAppts}
                     services={services}
-                    selectedServiceId={form.service_id || null}
+                    selectedServiceIds={form.service_ids}
                     selectedAssigneeId={selectedAssignee?.id ?? null}
                   />
                 ) : (

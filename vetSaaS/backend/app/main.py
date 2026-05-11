@@ -53,6 +53,8 @@ from app.modules.medical_records.router import (
 from app.modules.owners.router import router as owners_router
 from app.modules.patients.router import router as patients_router
 from app.modules.products.router import categories_router, movements_router, router as products_router
+from app.modules.reminders.router import router as reminders_router
+from app.modules.reports.router import router as reports_router
 from app.modules.sales.router import router as sales_router
 from app.modules.users.router import roles_router, router as users_router
 
@@ -71,3 +73,5 @@ app.include_router(categories_router, prefix="/api/v1")
 app.include_router(products_router, prefix="/api/v1")
 app.include_router(movements_router, prefix="/api/v1")
 app.include_router(sales_router, prefix="/api/v1")
+app.include_router(reminders_router, prefix="/api/v1")
+app.include_router(reports_router, prefix="/api/v1")

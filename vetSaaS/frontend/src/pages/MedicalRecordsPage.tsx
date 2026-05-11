@@ -1,298 +1,51 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowLeft, BookOpen, Bug, Paperclip, Plus, Scissors, Search, Syringe } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
+import { ArrowLeft, BookOpen, Bug, Paperclip, Scissors, Search, Syringe } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useApiClient } from "@/api/client"
-import { DewormingDialog } from "@/components/DewormingDialog"
-import { PatientSearch } from "@/components/PatientSearch"
-import { SurgeryDialog } from "@/components/SurgeryDialog"
-import { Button } from "@/components/ui/button"
-import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import type { Deworming, MedicalRecord, Patient, Surgery, User } from "@/types"
+import type { Deworming, MedicalRecord, Patient, ServiceType, Surgery, Vaccination } from "@/types"
+import { SERVICE_TYPE_LABELS } from "@/types"
 
-// ── Formulario nueva consulta ─────────────────────────────────────────────────
-
-interface RecordForm {
-  patient_id: string
-  veterinarian_id: string
-  reason: string
-  diagnosis: string
-  treatment: string
-  prescriptions: string
-  weight: string
-  temperature: string
-  heart_rate: string
-  respiratory_rate: string
-  pulse: string
-  physical_exam: string
-  visit_date: string
+const AREA_BADGE_CLASS: Record<ServiceType, string> = {
+  veterinary: "bg-blue-100 text-blue-800 border-blue-200",
+  grooming: "bg-purple-100 text-purple-800 border-purple-200",
+  aesthetic: "bg-pink-100 text-pink-800 border-pink-200",
 }
 
-const EMPTY_FORM: RecordForm = {
-  patient_id: "",
-  veterinarian_id: "",
-  reason: "",
-  diagnosis: "",
-  treatment: "",
-  prescriptions: "",
-  weight: "",
-  temperature: "",
-  heart_rate: "",
-  respiratory_rate: "",
-  pulse: "",
-  physical_exam: "",
-  visit_date: new Date().toISOString().slice(0, 10),
-}
-
-interface NewRecordDialogProps {
-  open: boolean
-  onClose: () => void
-  initialPatient: Patient | null
-}
-
-function NewRecordDialog({ open, onClose, initialPatient }: NewRecordDialogProps) {
-  const api = useApiClient()
-  const queryClient = useQueryClient()
-  const [formPatient, setFormPatient] = useState<Patient | null>(null)
-  const [form, setForm] = useState<RecordForm>(EMPTY_FORM)
-  const [error, setError] = useState("")
-
-  useEffect(() => {
-    if (open) {
-      setFormPatient(initialPatient)
-      setForm({ ...EMPTY_FORM, patient_id: initialPatient?.id ?? "" })
-      setError("")
-    }
-  }, [open, initialPatient])
-
-  const { data: users = [] } = useQuery({
-    queryKey: ["users"],
-    queryFn: () => api.get<User[]>("/users"),
-    enabled: open,
-  })
-
-  const mutation = useMutation({
-    mutationFn: (data: object) => api.post<MedicalRecord>("/medical-records", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["medical-records"] })
-      onClose()
-    },
-    onError: (e: Error) => setError(e.message),
-  })
-
-  function handlePatientChange(patient: Patient | null) {
-    setFormPatient(patient)
-    setForm((f) => ({ ...f, patient_id: patient?.id ?? "" }))
+function AreaBadge({ type }: { type: ServiceType | null }) {
+  if (!type) {
+    return (
+      <span className="text-xs px-1.5 py-0.5 rounded border bg-muted text-muted-foreground">
+        Sin cita
+      </span>
+    )
   }
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError("")
-    if (!form.patient_id) { setError("Selecciona un paciente"); return }
-    mutation.mutate({
-      patient_id: form.patient_id,
-      veterinarian_id: form.veterinarian_id,
-      reason: form.reason,
-      diagnosis: form.diagnosis || null,
-      treatment: form.treatment || null,
-      prescriptions: form.prescriptions || null,
-      weight: form.weight ? parseFloat(form.weight) : null,
-      temperature: form.temperature ? parseFloat(form.temperature) : null,
-      heart_rate: form.heart_rate ? parseInt(form.heart_rate, 10) : null,
-      respiratory_rate: form.respiratory_rate ? parseInt(form.respiratory_rate, 10) : null,
-      pulse: form.pulse || null,
-      physical_exam: form.physical_exam || null,
-      visit_date: form.visit_date,
-    })
-  }
-
   return (
-    <Dialog open={open} onClose={onClose} title="Nueva consulta" className="max-w-2xl">
-      <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Datos generales */}
-        <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Datos generales</p>
-          <div className="space-y-1.5">
-            <Label>Paciente *</Label>
-            <PatientSearch value={formPatient} onChange={handlePatientChange} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="vet_id">Veterinario *</Label>
-              <Select
-                id="vet_id"
-                required
-                value={form.veterinarian_id}
-                onChange={(e) => setForm({ ...form, veterinarian_id: e.target.value })}
-              >
-                <option value="">Seleccionar veterinario...</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>{u.full_name}</option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="visit_date">Fecha *</Label>
-              <Input
-                id="visit_date"
-                type="date"
-                required
-                value={form.visit_date}
-                onChange={(e) => setForm({ ...form, visit_date: e.target.value })}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* S — Subjetivo */}
-        <div className="space-y-3 pt-3 border-t">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            S — Subjetivo (anamnesis)
-          </p>
-          <div className="space-y-1.5">
-            <Label htmlFor="reason">Motivo de consulta *</Label>
-            <Textarea
-              id="reason"
-              required
-              rows={2}
-              value={form.reason}
-              onChange={(e) => setForm({ ...form, reason: e.target.value })}
-              placeholder="Síntomas descritos por el dueño, duración, antecedentes..."
-            />
-          </div>
-        </div>
-
-        {/* O — Objetivo */}
-        <div className="space-y-3 pt-3 border-t">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            O — Objetivo (examen clínico)
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="weight">Peso (kg)</Label>
-              <Input
-                id="weight"
-                type="number"
-                step="0.01"
-                min="0"
-                value={form.weight}
-                onChange={(e) => setForm({ ...form, weight: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="temperature">Temperatura (°C)</Label>
-              <Input
-                id="temperature"
-                type="number"
-                step="0.1"
-                min="0"
-                value={form.temperature}
-                onChange={(e) => setForm({ ...form, temperature: e.target.value })}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="heart_rate">FC (lpm)</Label>
-              <Input
-                id="heart_rate"
-                type="number"
-                min="0"
-                value={form.heart_rate}
-                onChange={(e) => setForm({ ...form, heart_rate: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="respiratory_rate">FR (rpm)</Label>
-              <Input
-                id="respiratory_rate"
-                type="number"
-                min="0"
-                value={form.respiratory_rate}
-                onChange={(e) => setForm({ ...form, respiratory_rate: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="pulse">Pulso</Label>
-              <Input
-                id="pulse"
-                value={form.pulse}
-                onChange={(e) => setForm({ ...form, pulse: e.target.value })}
-                placeholder="Ej. fuerte y regular"
-              />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="physical_exam">Examen físico</Label>
-            <Textarea
-              id="physical_exam"
-              rows={3}
-              value={form.physical_exam}
-              onChange={(e) => setForm({ ...form, physical_exam: e.target.value })}
-              placeholder="Exploración sistemática de órganos y sistemas..."
-            />
-          </div>
-        </div>
-
-        {/* A — Avalúo */}
-        <div className="space-y-3 pt-3 border-t">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            A — Avalúo (diagnóstico)
-          </p>
-          <div className="space-y-1.5">
-            <Label htmlFor="diagnosis">Diagnóstico presuntivo o definitivo</Label>
-            <Textarea id="diagnosis" rows={2} value={form.diagnosis}
-              onChange={(e) => setForm({ ...form, diagnosis: e.target.value })} />
-          </div>
-        </div>
-
-        {/* P — Plan */}
-        <div className="space-y-3 pt-3 border-t">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            P — Plan (tratamiento)
-          </p>
-          <div className="space-y-1.5">
-            <Label htmlFor="treatment">Tratamiento</Label>
-            <Textarea id="treatment" rows={2} value={form.treatment}
-              onChange={(e) => setForm({ ...form, treatment: e.target.value })} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="prescriptions">Receta / Medicamentos</Label>
-            <Textarea
-              id="prescriptions"
-              rows={2}
-              value={form.prescriptions}
-              onChange={(e) => setForm({ ...form, prescriptions: e.target.value })}
-              placeholder="Medicamento, concentración, dosis, frecuencia, duración..."
-            />
-          </div>
-        </div>
-
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? "Guardando..." : "Guardar consulta"}
-          </Button>
-        </div>
-      </form>
-    </Dialog>
+    <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${AREA_BADGE_CLASS[type]}`}>
+      {SERVICE_TYPE_LABELS[type]}
+    </span>
   )
 }
 
-// ── Vista de expediente por paciente ─────────────────────────────────────────
+function ExtBadge({ name }: { name: string | null }) {
+  return (
+    <span
+      title={name ? `Aplicada en ${name}` : "Aplicada en otra clínica"}
+      className="ml-1 inline-flex items-center rounded-full border border-amber-400 bg-amber-50 px-1.5 py-0 text-[9px] font-semibold uppercase tracking-wider text-amber-700 align-middle"
+    >
+      Ext.{name ? ` · ${name}` : ""}
+    </span>
+  )
+}
+
+
+// ── Vista de expediente por mascota ─────────────────────────────────────────
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("es", { dateStyle: "long" })
 }
 
 function RecordCard({ record }: { record: MedicalRecord }) {
-  const [dewormingOpen, setDewormingOpen] = useState(false)
-  const [surgeryOpen, setSurgeryOpen] = useState(false)
-
   const hasVitals =
     record.weight != null ||
     record.temperature != null ||
@@ -305,7 +58,10 @@ function RecordCard({ record }: { record: MedicalRecord }) {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="font-semibold text-base">{formatDate(record.visit_date)}</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-semibold text-base">{formatDate(record.visit_date)}</p>
+            <AreaBadge type={record.appointment_service_type} />
+          </div>
           <p className="text-muted-foreground">Atendido por {record.veterinarian_name}</p>
         </div>
         {hasVitals && (
@@ -349,11 +105,40 @@ function RecordCard({ record }: { record: MedicalRecord }) {
         </div>
       )}
 
-      {/* P — Receta */}
+      {/* P — Receta (texto libre, histórico) */}
       {record.prescriptions && (
         <div>
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Receta (P)</p>
           <p className="whitespace-pre-line">{record.prescriptions}</p>
+        </div>
+      )}
+
+      {/* P — Prescripciones estructuradas */}
+      {record.prescription_items.length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+            Prescripciones (P)
+          </p>
+          <ul className="space-y-1 text-xs">
+            {record.prescription_items.map((px) => (
+              <li key={px.id} className="rounded bg-muted/30 px-2 py-1">
+                <p className="font-medium">
+                  {px.product_name || px.custom_name}
+                  {px.custom_name && !px.product_name && (
+                    <span className="text-muted-foreground ml-2">(manual)</span>
+                  )}
+                </p>
+                {(px.dose || px.frequency || px.duration) && (
+                  <p className="text-muted-foreground">
+                    {[px.dose, px.frequency, px.duration].filter(Boolean).join(" · ")}
+                  </p>
+                )}
+                {px.notes && (
+                  <p className="text-muted-foreground italic mt-0.5">{px.notes}</p>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -365,8 +150,26 @@ function RecordCard({ record }: { record: MedicalRecord }) {
           </p>
           <ul className="space-y-1">
             {record.vaccinations.map((v) => (
-              <li key={v.id} className="flex justify-between text-xs">
-                <span className="font-medium">{v.vaccine_name}</span>
+              <li key={v.id} className="flex items-center gap-2 text-xs">
+                {v.photo_url && (
+                  <a href={v.photo_url} target="_blank" rel="noreferrer" title="Ver etiqueta">
+                    <img
+                      src={v.photo_url}
+                      alt="Etiqueta"
+                      className="h-8 w-8 object-cover rounded border"
+                    />
+                  </a>
+                )}
+                <span className="flex-1">
+                  <span className="font-medium">{v.vaccine_name}</span>
+                  {v.applied_externally && <ExtBadge name={v.external_clinic_name} />}
+                  {v.manufacturer && (
+                    <span className="text-muted-foreground ml-2">{v.manufacturer}</span>
+                  )}
+                  {v.batch_number && (
+                    <span className="text-muted-foreground ml-2">Lote: {v.batch_number}</span>
+                  )}
+                </span>
                 <span className="text-muted-foreground">
                   {new Date(v.applied_at).toLocaleDateString("es")}
                   {v.next_dose_at && ` · próxima: ${new Date(v.next_dose_at).toLocaleDateString("es")}`}
@@ -385,12 +188,28 @@ function RecordCard({ record }: { record: MedicalRecord }) {
           </p>
           <ul className="space-y-1">
             {record.dewormings.map((d) => (
-              <li key={d.id} className="flex justify-between text-xs">
-                <span>
+              <li key={d.id} className="flex items-center gap-2 text-xs">
+                {d.photo_url && (
+                  <a href={d.photo_url} target="_blank" rel="noreferrer" title="Ver etiqueta">
+                    <img
+                      src={d.photo_url}
+                      alt="Etiqueta"
+                      className="h-8 w-8 object-cover rounded border"
+                    />
+                  </a>
+                )}
+                <span className="flex-1">
                   <span className="font-medium">{d.product_name}</span>
+                  {d.applied_externally && <ExtBadge name={d.external_clinic_name} />}
+                  {d.manufacturer && (
+                    <span className="text-muted-foreground ml-2">{d.manufacturer}</span>
+                  )}
                   <span className="text-muted-foreground ml-2">
                     ({d.treatment_type === "internal" ? "interna" : d.treatment_type === "external" ? "externa" : "ambas"})
                   </span>
+                  {d.batch_number && (
+                    <span className="text-muted-foreground ml-2">Lote: {d.batch_number}</span>
+                  )}
                 </span>
                 <span className="text-muted-foreground">
                   {new Date(d.applied_at).toLocaleDateString("es")}
@@ -412,7 +231,10 @@ function RecordCard({ record }: { record: MedicalRecord }) {
             {record.surgeries.map((s) => (
               <li key={s.id} className="text-xs">
                 <div className="flex justify-between">
-                  <span className="font-medium">{s.name}</span>
+                  <span className="font-medium">
+                    {s.name}
+                    {s.applied_externally && <ExtBadge name={s.external_clinic_name} />}
+                  </span>
                   <span className="text-muted-foreground">
                     {new Date(s.performed_at).toLocaleDateString("es")}
                     {s.veterinarian_name && ` · ${s.veterinarian_name}`}
@@ -447,32 +269,6 @@ function RecordCard({ record }: { record: MedicalRecord }) {
         </div>
       )}
 
-      {/* Acciones */}
-      <div className="flex flex-wrap gap-2 pt-3 border-t">
-        <Button size="sm" variant="outline" onClick={() => setDewormingOpen(true)}>
-          <Bug className="h-3.5 w-3.5" />
-          Desparasitación
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => setSurgeryOpen(true)}>
-          <Scissors className="h-3.5 w-3.5" />
-          Cirugía
-        </Button>
-      </div>
-
-      <DewormingDialog
-        open={dewormingOpen}
-        onClose={() => setDewormingOpen(false)}
-        patientId={record.patient_id}
-        patientName={record.patient_name}
-        recordId={record.id}
-      />
-      <SurgeryDialog
-        open={surgeryOpen}
-        onClose={() => setSurgeryOpen(false)}
-        patientId={record.patient_id}
-        patientName={record.patient_name}
-        recordId={record.id}
-      />
     </div>
   )
 }
@@ -480,13 +276,10 @@ function RecordCard({ record }: { record: MedicalRecord }) {
 interface PatientHistoryViewProps {
   patientId: string
   onBack: () => void
-  onNewRecord: () => void
 }
 
-function PatientHistoryView({ patientId, onBack, onNewRecord }: PatientHistoryViewProps) {
+function PatientHistoryView({ patientId, onBack }: PatientHistoryViewProps) {
   const api = useApiClient()
-  const [dewormingDialogOpen, setDewormingDialogOpen] = useState(false)
-  const [surgeryDialogOpen, setSurgeryDialogOpen] = useState(false)
 
   const { data: patient } = useQuery({
     queryKey: ["patient", patientId],
@@ -509,9 +302,19 @@ function PatientHistoryView({ patientId, onBack, onNewRecord }: PatientHistoryVi
     queryFn: () => api.get<Surgery[]>(`/patients/${patientId}/surgeries`),
   })
 
+  const { data: allVaccinations = [] } = useQuery({
+    queryKey: ["patient-vaccinations", patientId],
+    queryFn: () => api.get<Vaccination[]>(`/patients/${patientId}/vaccinations`),
+  })
+
+  // Antecedentes = items sin record_id (carnet previo, otra clínica, etc.)
   const standaloneDewormings = allDewormings.filter((d) => d.medical_record_id === null)
   const standaloneSurgeries = allSurgeries.filter((s) => s.medical_record_id === null)
-  const hasAntecedentes = standaloneDewormings.length > 0 || standaloneSurgeries.length > 0
+  const standaloneVaccinations = allVaccinations.filter((v) => v.medical_record_id === null)
+  const hasAntecedentes =
+    standaloneDewormings.length > 0 ||
+    standaloneSurgeries.length > 0 ||
+    standaloneVaccinations.length > 0
 
   const sorted = [...records].sort(
     (a, b) => new Date(b.visit_date).getTime() - new Date(a.visit_date).getTime()
@@ -528,23 +331,9 @@ function PatientHistoryView({ patientId, onBack, onNewRecord }: PatientHistoryVi
           <ArrowLeft className="h-4 w-4" />
           Todos los registros
         </button>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => setDewormingDialogOpen(true)}>
-            <Bug className="h-4 w-4" />
-            Desparasitación
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setSurgeryDialogOpen(true)}>
-            <Scissors className="h-4 w-4" />
-            Cirugía
-          </Button>
-          <Button onClick={onNewRecord}>
-            <Plus className="h-4 w-4" />
-            Nueva consulta
-          </Button>
-        </div>
       </div>
 
-      {/* Ficha del paciente */}
+      {/* Ficha del mascota */}
       {patient && (
         <div className="rounded-lg border bg-card px-6 py-4 flex items-center gap-6">
           <div className="flex-1">
@@ -579,6 +368,46 @@ function PatientHistoryView({ patientId, onBack, onNewRecord }: PatientHistoryVi
         <div className="rounded-lg border bg-card p-5 space-y-4 text-sm">
           <p className="font-semibold text-base">Antecedentes (sin consulta asociada)</p>
 
+          {standaloneVaccinations.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                <Syringe className="h-3.5 w-3.5" /> Vacunas
+              </p>
+              <ul className="space-y-1">
+                {standaloneVaccinations.map((v) => (
+                  <li key={v.id} className="text-xs">
+                    <div className="flex items-center gap-2">
+                      {v.photo_url && (
+                        <a href={v.photo_url} target="_blank" rel="noreferrer" title="Ver etiqueta">
+                          <img
+                            src={v.photo_url}
+                            alt="Etiqueta"
+                            className="h-8 w-8 object-cover rounded border"
+                          />
+                        </a>
+                      )}
+                      <span className="flex-1">
+                        <span className="font-medium">{v.vaccine_name}</span>
+                        {v.applied_externally && <ExtBadge name={v.external_clinic_name} />}
+                        {v.manufacturer && (
+                          <span className="text-muted-foreground ml-2">{v.manufacturer}</span>
+                        )}
+                        {v.batch_number && (
+                          <span className="text-muted-foreground ml-2">Lote: {v.batch_number}</span>
+                        )}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {new Date(v.applied_at).toLocaleDateString("es")}
+                        {v.next_dose_at &&
+                          ` · próxima: ${new Date(v.next_dose_at).toLocaleDateString("es")}`}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {standaloneDewormings.length > 0 && (
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
@@ -587,9 +416,19 @@ function PatientHistoryView({ patientId, onBack, onNewRecord }: PatientHistoryVi
               <ul className="space-y-1">
                 {standaloneDewormings.map((d) => (
                   <li key={d.id} className="text-xs">
-                    <div className="flex justify-between">
-                      <span>
+                    <div className="flex items-center gap-2">
+                      {d.photo_url && (
+                        <a href={d.photo_url} target="_blank" rel="noreferrer" title="Ver etiqueta">
+                          <img
+                            src={d.photo_url}
+                            alt="Etiqueta"
+                            className="h-8 w-8 object-cover rounded border"
+                          />
+                        </a>
+                      )}
+                      <span className="flex-1">
                         <span className="font-medium">{d.product_name}</span>
+                        {d.applied_externally && <ExtBadge name={d.external_clinic_name} />}
                         <span className="text-muted-foreground ml-2">
                           ({d.treatment_type === "internal" ? "interna" : d.treatment_type === "external" ? "externa" : "ambas"})
                         </span>
@@ -599,7 +438,7 @@ function PatientHistoryView({ patientId, onBack, onNewRecord }: PatientHistoryVi
                         {d.next_dose_at && ` · próxima: ${new Date(d.next_dose_at).toLocaleDateString("es")}`}
                       </span>
                     </div>
-                    {d.notes && <p className="text-muted-foreground mt-0.5">{d.notes}</p>}
+                    {d.notes && <p className="text-muted-foreground mt-0.5 ml-10">{d.notes}</p>}
                   </li>
                 ))}
               </ul>
@@ -615,7 +454,10 @@ function PatientHistoryView({ patientId, onBack, onNewRecord }: PatientHistoryVi
                 {standaloneSurgeries.map((s) => (
                   <li key={s.id} className="text-xs">
                     <div className="flex justify-between">
-                      <span className="font-medium">{s.name}</span>
+                      <span className="font-medium">
+                        {s.name}
+                        {s.applied_externally && <ExtBadge name={s.external_clinic_name} />}
+                      </span>
                       <span className="text-muted-foreground">
                         {new Date(s.performed_at).toLocaleDateString("es")}
                         {s.veterinarian_name && ` · ${s.veterinarian_name}`}
@@ -639,10 +481,8 @@ function PatientHistoryView({ patientId, onBack, onNewRecord }: PatientHistoryVi
       ) : sorted.length === 0 ? (
         <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">
           <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-40" />
-          <p>Sin consultas registradas para este paciente</p>
-          <Button variant="outline" className="mt-4" onClick={onNewRecord}>
-            Registrar primera consulta
-          </Button>
+          <p>Sin consultas registradas para esta mascota</p>
+          <p className="text-xs mt-1">Las consultas se registran al atender una cita.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -652,24 +492,11 @@ function PatientHistoryView({ patientId, onBack, onNewRecord }: PatientHistoryVi
         </div>
       )}
 
-      {/* Dialogs */}
-      <DewormingDialog
-        open={dewormingDialogOpen}
-        onClose={() => setDewormingDialogOpen(false)}
-        patientId={patientId}
-        patientName={patient?.name}
-      />
-      <SurgeryDialog
-        open={surgeryDialogOpen}
-        onClose={() => setSurgeryDialogOpen(false)}
-        patientId={patientId}
-        patientName={patient?.name}
-      />
     </div>
   )
 }
 
-// ── Búsqueda simple de paciente (para filtro de la tabla) ─────────────────────
+// ── Búsqueda simple de mascota (para filtro de la tabla) ─────────────────────
 
 interface PatientFilterProps {
   onSelect: (patientId: string) => void
@@ -710,7 +537,7 @@ function PatientFilter({ onSelect }: PatientFilterProps) {
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
       <Input
         className="pl-9"
-        placeholder="Ver expediente de paciente..."
+        placeholder="Ver expediente de mascota..."
         value={query}
         onFocus={() => setOpen(true)}
         onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
@@ -743,7 +570,7 @@ function PatientFilter({ onSelect }: PatientFilterProps) {
   )
 }
 
-// ── Vista de tabla (pacientes únicos con última consulta) ─────────────────────
+// ── Vista de tabla (mascotas únicos con última consulta) ─────────────────────
 
 interface PatientSummary {
   patient_id: string
@@ -756,15 +583,18 @@ interface PatientSummary {
 
 interface AllRecordsViewProps {
   onSelectPatient: (id: string) => void
-  onNewRecord: () => void
 }
 
-function AllRecordsView({ onSelectPatient, onNewRecord }: AllRecordsViewProps) {
+function AllRecordsView({ onSelectPatient }: AllRecordsViewProps) {
   const api = useApiClient()
+  const [areaFilter, setAreaFilter] = useState<ServiceType | "">("")
 
   const { data: records = [], isLoading } = useQuery({
-    queryKey: ["medical-records", "all"],
-    queryFn: () => api.get<MedicalRecord[]>("/medical-records?limit=500"),
+    queryKey: ["medical-records", "all", areaFilter],
+    queryFn: () =>
+      api.get<MedicalRecord[]>(
+        `/medical-records?limit=500${areaFilter ? `&service_type=${areaFilter}` : ""}`
+      ),
     staleTime: 0,
   })
 
@@ -794,24 +624,40 @@ function AllRecordsView({ onSelectPatient, onNewRecord }: AllRecordsViewProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Historia Clínica</h1>
-          <p className="text-sm text-muted-foreground">Expedientes de pacientes</p>
-        </div>
-        <Button onClick={onNewRecord}>
-          <Plus className="h-4 w-4" />
-          Nueva consulta
-        </Button>
+      <div>
+        <h1 className="text-2xl font-bold">Historia Clínica</h1>
+        <p className="text-sm text-muted-foreground">Expedientes de mascotas</p>
       </div>
 
-      <PatientFilter onSelect={onSelectPatient} />
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <PatientFilter onSelect={onSelectPatient} />
+        <div className="flex rounded-md border overflow-hidden">
+          {([
+            { value: "", label: "Todas las áreas" },
+            { value: "veterinary", label: "Veterinaria" },
+            { value: "grooming", label: "Peluquería" },
+            { value: "aesthetic", label: "Estética" },
+          ] as const).map((opt) => (
+            <button
+              key={opt.value || "all"}
+              onClick={() => setAreaFilter(opt.value)}
+              className={`px-3 py-1.5 text-xs transition-colors ${
+                areaFilter === opt.value
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="rounded-lg border bg-card overflow-hidden">
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/50">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Paciente</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Mascota</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Última consulta</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Último motivo</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Veterinario</th>
@@ -871,25 +717,6 @@ function AllRecordsView({ onSelectPatient, onNewRecord }: AllRecordsViewProps) {
 
 export function MedicalRecordsPage() {
   const [historyPatientId, setHistoryPatientId] = useState<string | null>(null)
-  const [formOpen, setFormOpen] = useState(false)
-  const [formInitialPatient, setFormInitialPatient] = useState<Patient | null>(null)
-  const api = useApiClient()
-
-  const { data: historyPatient = null } = useQuery({
-    queryKey: ["patient", historyPatientId],
-    queryFn: () => api.get<Patient>(`/patients/${historyPatientId}`),
-    enabled: historyPatientId !== null && formOpen,
-  })
-
-  function openCreate(patient?: Patient) {
-    setFormInitialPatient(patient ?? null)
-    setFormOpen(true)
-  }
-
-  function closeForm() {
-    setFormOpen(false)
-    setFormInitialPatient(null)
-  }
 
   return (
     <>
@@ -897,23 +724,10 @@ export function MedicalRecordsPage() {
         <PatientHistoryView
           patientId={historyPatientId}
           onBack={() => setHistoryPatientId(null)}
-          onNewRecord={() => {
-            setFormInitialPatient(historyPatient)
-            setFormOpen(true)
-          }}
         />
       ) : (
-        <AllRecordsView
-          onSelectPatient={setHistoryPatientId}
-          onNewRecord={() => openCreate()}
-        />
+        <AllRecordsView onSelectPatient={setHistoryPatientId} />
       )}
-
-      <NewRecordDialog
-        open={formOpen}
-        onClose={closeForm}
-        initialPatient={formInitialPatient}
-      />
     </>
   )
 }

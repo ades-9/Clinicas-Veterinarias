@@ -50,5 +50,17 @@ def vaccination_card_key(clinic_id: str, patient_id: str, vaccination_id: str) -
     return f"clinics/{clinic_id}/vaccination_cards/{patient_id}_{vaccination_id}.pdf"
 
 
+def vaccination_photo_key(clinic_id: str, vaccination_id: str, filename: str) -> str:
+    return f"clinics/{clinic_id}/vaccination_photos/{vaccination_id}_{filename}"
+
+
+def deworming_photo_key(clinic_id: str, deworming_id: str, filename: str) -> str:
+    return f"clinics/{clinic_id}/deworming_photos/{deworming_id}_{filename}"
+
+
+def patient_photo_key(clinic_id: str, patient_id: str, filename: str) -> str:
+    return f"clinics/{clinic_id}/patient_photos/{patient_id}_{filename}"
+
+
 def report_key(clinic_id: str, report_id: str) -> str:
     return f"clinics/{clinic_id}/reports/{report_id}.pdf"

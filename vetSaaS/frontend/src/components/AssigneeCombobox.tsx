@@ -3,14 +3,16 @@ import { Search, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useApiClient } from "@/api/client"
 import { Input } from "@/components/ui/input"
-import type { User } from "@/types"
+import type { User, UserArea } from "@/types"
 
 interface Props {
   value: User | null
   onChange: (user: User | null) => void
+  /** Si se provee, solo aparecen usuarios cuyo `areas` incluya este valor (o tengan areas vacío). */
+  areaFilter?: UserArea | null
 }
 
-export function AssigneeCombobox({ value, onChange }: Props) {
+export function AssigneeCombobox({ value, onChange, areaFilter }: Props) {
   const api = useApiClient()
   const [query, setQuery] = useState("")
   const [open, setOpen] = useState(false)
@@ -32,13 +34,16 @@ export function AssigneeCombobox({ value, onChange }: Props) {
     staleTime: 60_000,
   })
 
+  const byArea = areaFilter
+    ? users.filter((u) => u.areas.length === 0 || u.areas.includes(areaFilter))
+    : users
   const filtered = query.trim()
-    ? users.filter(
+    ? byArea.filter(
         (u) =>
           u.full_name.toLowerCase().includes(query.toLowerCase()) ||
           u.role_name?.toLowerCase().includes(query.toLowerCase())
       )
-    : users
+    : byArea
 
   function handleSelect(u: User) {
     onChange(u)

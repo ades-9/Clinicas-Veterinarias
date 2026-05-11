@@ -21,7 +21,7 @@ _CATEGORY_SELECT = "SELECT id, clinic_id, name, created_at FROM product_categori
 _PRODUCT_SELECT = """
     SELECT p.id, p.clinic_id, p.category_id, c.name AS category_name,
            p.name, p.description, p.sku, p.unit, p.price, p.cost,
-           p.stock, p.min_stock, p.is_active, p.created_at
+           p.stock, p.min_stock, p.is_active, p.is_medication, p.created_at
     FROM products p
     LEFT JOIN product_categories c ON c.id = p.category_id AND c.deleted_at IS NULL
     WHERE p.deleted_at IS NULL
@@ -101,6 +101,9 @@ async def list_products(
     search: str | None = None,
     category_id: str | None = None,
     low_stock: bool = False,
+    is_active: bool | None = None,
+    in_stock: bool = False,
+    is_medication: bool | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[ProductRead]:
@@ -108,13 +111,25 @@ async def list_products(
     filters = ""
     params: dict = {"limit": limit, "offset": offset}
     if search:
-        filters += " AND (LOWER(p.name) LIKE :search OR LOWER(COALESCE(p.sku, '')) LIKE :search)"
+        filters += (
+            " AND (LOWER(p.name) LIKE :search"
+            " OR LOWER(COALESCE(p.sku, '')) LIKE :search"
+            " OR LOWER(COALESCE(c.name, '')) LIKE :search)"
+        )
         params["search"] = f"%{search.lower()}%"
     if category_id:
         filters += " AND p.category_id = :category_id"
         params["category_id"] = category_id
     if low_stock:
         filters += " AND p.stock <= p.min_stock"
+    if is_active is not None:
+        filters += " AND p.is_active = :is_active"
+        params["is_active"] = is_active
+    if in_stock:
+        filters += " AND p.stock > 0"
+    if is_medication is not None:
+        filters += " AND p.is_medication = :is_medication"
+        params["is_medication"] = is_medication
     result = await session.execute(
         text(f"{_PRODUCT_SELECT}{filters} ORDER BY p.name LIMIT :limit OFFSET :offset"),
         params,
@@ -142,8 +157,10 @@ async def create_product(clinic_id: str, data: ProductCreate, session: AsyncSess
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Categoría no encontrada")
     result = await session.execute(
         text("""
-            INSERT INTO products (clinic_id, category_id, name, description, sku, unit, price, cost, min_stock)
-            VALUES (:clinic_id, :category_id, :name, :description, :sku, :unit, :price, :cost, :min_stock)
+            INSERT INTO products
+                (clinic_id, category_id, name, description, sku, unit, price, cost, min_stock, is_medication)
+            VALUES
+                (:clinic_id, :category_id, :name, :description, :sku, :unit, :price, :cost, :min_stock, :is_medication)
             RETURNING id
         """),
         {"clinic_id": clinic_id, **data.model_dump()},

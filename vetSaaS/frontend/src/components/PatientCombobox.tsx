@@ -151,7 +151,7 @@ export function PatientCombobox({ ownerId, value, onChange }: Props) {
           type="button"
           onClick={handleClear}
           className="text-muted-foreground hover:text-foreground transition-colors"
-          aria-label="Quitar paciente"
+          aria-label="Quitar mascota"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -175,7 +175,7 @@ export function PatientCombobox({ ownerId, value, onChange }: Props) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <Input
               className="pl-9"
-              placeholder="Buscar paciente..."
+              placeholder="Buscar mascota..."
               value={query}
               onFocus={() => setDropdownOpen(true)}
               onChange={(e) => {
@@ -191,13 +191,13 @@ export function PatientCombobox({ ownerId, value, onChange }: Props) {
                   <div className="px-3 py-2 text-sm text-muted-foreground">
                     {debouncedQuery
                       ? `Sin resultados.`
-                      : "Este propietario no tiene pacientes."}
+                      : "Este propietario no tiene mascotas."}
                     <button
                       type="button"
                       onClick={handleOpenCreate}
                       className="text-primary hover:underline ml-1"
                     >
-                      {debouncedQuery ? `Crear "${debouncedQuery}"` : "Crear paciente"}
+                      {debouncedQuery ? `Crear "${debouncedQuery}"` : "Crear mascota"}
                     </button>
                   </div>
                 ) : (
@@ -228,7 +228,7 @@ export function PatientCombobox({ ownerId, value, onChange }: Props) {
             type="button"
             variant="outline"
             size="icon"
-            title="Crear nuevo paciente"
+            title="Crear nuevo mascota"
             onClick={handleOpenCreate}
           >
             <Plus className="h-4 w-4" />
@@ -240,7 +240,7 @@ export function PatientCombobox({ ownerId, value, onChange }: Props) {
         <div className="rounded-md border bg-muted/30 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Nuevo paciente
+              Nuevo mascota
             </p>
             <button
               type="button"

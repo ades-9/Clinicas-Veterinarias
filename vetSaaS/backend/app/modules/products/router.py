@@ -67,13 +67,19 @@ async def list_products(
     q: str | None = Query(default=None),
     category_id: str | None = Query(default=None),
     low_stock: bool = Query(default=False),
+    is_active: bool | None = Query(default=None),
+    in_stock: bool = Query(default=False),
+    is_medication: bool | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     user: CurrentUser = require_permission("products.view"),
     session: AsyncSession = Depends(get_db),
 ):
     return await crud.list_products(
-        user.clinic_id, session, search=q, category_id=category_id, low_stock=low_stock, limit=limit, offset=offset
+        user.clinic_id, session,
+        search=q, category_id=category_id, low_stock=low_stock,
+        is_active=is_active, in_stock=in_stock, is_medication=is_medication,
+        limit=limit, offset=offset,
     )
 
 

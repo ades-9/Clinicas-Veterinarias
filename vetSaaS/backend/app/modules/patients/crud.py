@@ -13,7 +13,7 @@ _PATIENT_SELECT = """
            p.sex, p.is_sterilized, p.color, p.microchip_number,
            p.distinctive_marks, p.allergies, p.chronic_conditions,
            p.temperament_notes, p.lifestyle_notes, p.grooming_preferences,
-           p.vaccination_code, p.notes, p.created_at
+           p.vaccination_code, p.photo_url, p.notes, p.created_at
     FROM patients p
     JOIN owners o ON o.id = p.owner_id
     LEFT JOIN species sp ON sp.id = p.species_id

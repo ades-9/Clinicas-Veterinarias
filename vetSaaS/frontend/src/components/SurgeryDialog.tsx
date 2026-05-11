@@ -14,6 +14,8 @@ interface SurgeryForm {
   veterinarian_name: string
   description: string
   complications: string
+  applied_externally: boolean
+  external_clinic_name: string
 }
 
 const EMPTY: SurgeryForm = {
@@ -22,6 +24,18 @@ const EMPTY: SurgeryForm = {
   veterinarian_name: "",
   description: "",
   complications: "",
+  applied_externally: false,
+  external_clinic_name: "",
+}
+
+export interface SurgeryDraftPayload {
+  name: string
+  performed_at: string
+  veterinarian_name: string | null
+  description: string | null
+  complications: string | null
+  applied_externally: boolean
+  external_clinic_name: string | null
 }
 
 interface Props {
@@ -31,9 +45,18 @@ interface Props {
   patientName?: string
   /** Si se provee, la cirugía queda atada a esa consulta. */
   recordId?: string
+  /** Si se provee, NO postea: devuelve el draft al padre para que lo acumule. */
+  onSubmitDraft?: (draft: SurgeryDraftPayload) => void
 }
 
-export function SurgeryDialog({ open, onClose, patientId, patientName, recordId }: Props) {
+export function SurgeryDialog({
+  open,
+  onClose,
+  patientId,
+  patientName,
+  recordId,
+  onSubmitDraft,
+}: Props) {
   const api = useApiClient()
   const qc = useQueryClient()
   const [form, setForm] = useState<SurgeryForm>(EMPTY)
@@ -62,13 +85,23 @@ export function SurgeryDialog({ open, onClose, patientId, patientName, recordId 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
-    mutation.mutate({
+    const payload = {
       name: form.name,
       performed_at: form.performed_at,
       veterinarian_name: form.veterinarian_name || null,
       description: form.description || null,
       complications: form.complications || null,
-    })
+      applied_externally: form.applied_externally,
+      external_clinic_name: form.applied_externally
+        ? (form.external_clinic_name || null)
+        : null,
+    }
+    if (onSubmitDraft) {
+      onSubmitDraft(payload)
+      onClose()
+      return
+    }
+    mutation.mutate(payload)
   }
 
   return (
@@ -132,6 +165,28 @@ export function SurgeryDialog({ open, onClose, patientId, patientName, recordId 
             onChange={(e) => setForm({ ...form, complications: e.target.value })}
             placeholder="Si las hubo durante o después de la cirugía"
           />
+        </div>
+
+        <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+          <label className="flex items-center gap-2 cursor-pointer text-sm">
+            <input
+              type="checkbox"
+              checked={form.applied_externally}
+              onChange={(e) =>
+                setForm({ ...form, applied_externally: e.target.checked })
+              }
+            />
+            <span>Realizada en otra clínica</span>
+          </label>
+          {form.applied_externally && (
+            <Input
+              placeholder="Nombre de la clínica (opcional)"
+              value={form.external_clinic_name}
+              onChange={(e) =>
+                setForm({ ...form, external_clinic_name: e.target.value })
+              }
+            />
+          )}
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}

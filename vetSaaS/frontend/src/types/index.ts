@@ -15,6 +15,8 @@ export interface Role {
   name: string
 }
 
+export type UserArea = "veterinary" | "grooming" | "aesthetic"
+
 export interface User {
   id: string
   clinic_id: string
@@ -24,10 +26,31 @@ export interface User {
   full_name: string
   email: string
   is_active: boolean
+  areas: UserArea[]
   created_at: string
 }
 
 export type PreferredContact = "whatsapp" | "sms" | "email" | "phone"
+
+export type ReminderKind = "vaccine" | "deworming"
+export type ReminderType = "appointment_24h" | "vaccine_due" | "deworming_due"
+
+export interface UpcomingReminder {
+  kind: ReminderKind
+  patient_id: string
+  patient_name: string
+  owner_id: string
+  owner_name: string
+  owner_phone: string | null
+  owner_email: string | null
+  owner_preferred_contact: PreferredContact | null
+  label: string
+  manufacturer: string | null
+  applied_at: string
+  next_dose_at: string
+  days_from_today: number
+  last_reminded_at: string | null
+}
 
 export interface Owner {
   id: string
@@ -66,12 +89,19 @@ export interface Patient {
   lifestyle_notes: string | null
   grooming_preferences: string | null
   vaccination_code: string | null
+  photo_url: string | null
   notes: string | null
   created_at: string
 }
 
-export type ServiceType = "veterinary" | "grooming" | "promotional"
+export type ServiceType = "veterinary" | "grooming" | "aesthetic"
 export type AppointmentStatus = "pending" | "confirmed" | "attended" | "cancelled"
+
+export const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {
+  veterinary: "Veterinaria",
+  grooming: "Peluquería",
+  aesthetic: "Estética",
+}
 
 export interface AppointmentService {
   id: string
@@ -84,6 +114,7 @@ export interface AppointmentService {
   promo_start: string | null
   promo_end: string | null
   effective_price: number
+  is_promotional: boolean
   created_at: string
 }
 
@@ -103,6 +134,14 @@ export interface ProductUnit {
   name: string
 }
 
+export interface VaccineType {
+  id: string
+  name: string
+  species_id: string | null
+  description: string | null
+  recommended_revaccination_months: number | null
+}
+
 export interface Appointment {
   id: string
   clinic_id: string
@@ -112,12 +151,13 @@ export interface Appointment {
   owner_name: string
   assigned_user_id: string
   assigned_user_name: string
-  service_id: string
-  service_name: string
-  service_type: ServiceType
+  service_type: ServiceType  // área (común a todos los servicios de la cita)
+  services: AppointmentService[]
+  total_duration_minutes: number
   scheduled_at: string
   status: AppointmentStatus
   notes: string | null
+  is_emergency: boolean
   created_at: string
 }
 
@@ -126,10 +166,17 @@ export interface Vaccination {
   clinic_id: string
   patient_id: string
   medical_record_id: string | null
+  vaccine_type_id: string | null
   vaccine_name: string
+  manufacturer: string | null
   applied_at: string
   next_dose_at: string | null
   batch_number: string | null
+  expiration_date: string | null
+  weight_at_application: number | null
+  photo_url: string | null
+  applied_externally: boolean
+  external_clinic_name: string | null
   created_at: string
 }
 
@@ -141,12 +188,17 @@ export interface Deworming {
   patient_id: string
   medical_record_id: string | null
   product_name: string
+  manufacturer: string | null
   treatment_type: DewormingType
   applied_at: string
   next_dose_at: string | null
   weight_at_application: number | null
   batch_number: string | null
+  expiration_date: string | null
   notes: string | null
+  photo_url: string | null
+  applied_externally: boolean
+  external_clinic_name: string | null
   created_at: string
 }
 
@@ -160,6 +212,8 @@ export interface Surgery {
   veterinarian_name: string | null
   description: string | null
   complications: string | null
+  applied_externally: boolean
+  external_clinic_name: string | null
   created_at: string
 }
 
@@ -181,6 +235,7 @@ export interface MedicalRecord {
   veterinarian_id: string
   veterinarian_name: string
   appointment_id: string | null
+  appointment_service_type: ServiceType | null
   reason: string
   diagnosis: string | null
   treatment: string | null
@@ -196,6 +251,7 @@ export interface MedicalRecord {
   vaccinations: Vaccination[]
   dewormings: Deworming[]
   surgeries: Surgery[]
+  prescription_items: PrescriptionItem[]
   attachments: Attachment[]
 }
 
@@ -220,6 +276,21 @@ export interface Product {
   stock: number
   min_stock: number
   is_active: boolean
+  is_medication: boolean
+  created_at: string
+}
+
+export interface PrescriptionItem {
+  id: string
+  clinic_id: string
+  medical_record_id: string
+  product_id: string | null
+  product_name: string | null
+  custom_name: string | null
+  dose: string | null
+  frequency: string | null
+  duration: string | null
+  notes: string | null
   created_at: string
 }
 
@@ -247,6 +318,37 @@ export interface SaleItem {
   quantity: number
   unit_price: number
   subtotal: number
+  professional_user_id: string | null
+  professional_name: string | null
+}
+
+export interface ProfessionalMetrics {
+  user_id: string
+  full_name: string
+  role_name: string
+  appointments_attended: number
+  appointments_cancelled: number
+  consultations_count: number
+  services_sold: number
+  products_sold: number
+  revenue_total: number
+  revenue_veterinary: number
+  revenue_grooming: number
+  revenue_aesthetic: number
+}
+
+export interface ProfessionalPerformanceReport {
+  date_from: string
+  date_to: string
+  professionals: ProfessionalMetrics[]
+}
+
+export type SaleStatus = "pending" | "completed" | "cancelled"
+
+export const SALE_STATUS_LABELS: Record<SaleStatus, string> = {
+  pending: "Pendiente",
+  completed: "Cobrada",
+  cancelled: "Cancelada",
 }
 
 export interface Sale {
@@ -258,6 +360,7 @@ export interface Sale {
   patient_name: string | null
   owner_id: string | null
   owner_name: string | null
+  status: SaleStatus
   total: number
   notes: string | null
   created_at: string

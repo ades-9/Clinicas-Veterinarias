@@ -7,11 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import set_rls_context
-from app.modules.users.schemas import RoleRead, UserCreate, UserRead, UserUpdate
+from app.modules.users.schemas import RoleRead, UserCreate, UserCreateResponse, UserRead, UserUpdate
 
 _USER_SELECT = """
     SELECT u.id, u.clinic_id, u.role_id, r.name AS role_name,
-           u.clerk_user_id, u.full_name, u.email, u.is_active, u.created_at
+           u.clerk_user_id, u.full_name, u.email, u.is_active,
+           COALESCE(u.areas, '{}'::text[]) AS areas, u.created_at
     FROM users u
     JOIN roles r ON r.id = u.role_id
 """
@@ -57,7 +58,7 @@ async def list_roles(clinic_id: str, session: AsyncSession) -> list[RoleRead]:
     return [RoleRead(**row) for row in result.mappings()]
 
 
-async def create_user(clinic_id: str, data: UserCreate, session: AsyncSession) -> UserRead:
+async def create_user(clinic_id: str, data: UserCreate, session: AsyncSession) -> UserCreateResponse:
     await set_rls_context(session, clinic_id)
 
     role = await _get_role(data.role_id, clinic_id, session)
@@ -99,12 +100,13 @@ async def create_user(clinic_id: str, data: UserCreate, session: AsyncSession) -
         result = await session.execute(
             text("""
                 WITH inserted AS (
-                    INSERT INTO users (clinic_id, role_id, clerk_user_id, full_name, email)
-                    VALUES (:clinic_id, :role_id, :clerk_user_id, :full_name, :email)
+                    INSERT INTO users (clinic_id, role_id, clerk_user_id, full_name, email, areas)
+                    VALUES (:clinic_id, :role_id, :clerk_user_id, :full_name, :email, :areas)
                     RETURNING *
                 )
                 SELECT i.id, i.clinic_id, i.role_id, r.name AS role_name,
-                       i.clerk_user_id, i.full_name, i.email, i.is_active, i.created_at
+                       i.clerk_user_id, i.full_name, i.email, i.is_active,
+                       COALESCE(i.areas, '{}'::text[]) AS areas, i.created_at
                 FROM inserted i
                 JOIN roles r ON r.id = i.role_id
             """),
@@ -114,11 +116,12 @@ async def create_user(clinic_id: str, data: UserCreate, session: AsyncSession) -
                 "clerk_user_id": clerk_user_id,
                 "full_name": data.full_name,
                 "email": data.email,
+                "areas": data.areas,
             },
         )
         user = UserRead(**result.mappings().first())
         await session.commit()
-        return user
+        return UserCreateResponse(user=user, temporary_password=temp_password)
     except Exception:
         # Revertir usuario en Clerk si el commit falla
         async with httpx.AsyncClient() as client:

@@ -1,8 +1,11 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, model_validator
+
+SaleStatus = Literal["pending", "completed", "cancelled"]
 
 
 class SaleItemCreate(BaseModel):
@@ -10,6 +13,9 @@ class SaleItemCreate(BaseModel):
     service_id: str | None = None
     quantity: Decimal
     unit_price: Decimal
+    # Profesional que prestó el servicio o que vendió el producto.
+    # Para servicios derivados de una atención, se asigna automáticamente.
+    professional_user_id: str | None = None
 
     @model_validator(mode="after")
     def check_one_type(self) -> "SaleItemCreate":
@@ -28,6 +34,8 @@ class SaleItemRead(BaseModel):
     quantity: Decimal
     unit_price: Decimal
     subtotal: Decimal
+    professional_user_id: UUID | None
+    professional_name: str | None
 
 
 class SaleCreate(BaseModel):
@@ -36,6 +44,12 @@ class SaleCreate(BaseModel):
     owner_id: str | None = None
     notes: str | None = None
     items: list[SaleItemCreate]
+
+
+class SaleUpdate(BaseModel):
+    """Edición de una venta pendiente: reemplaza items y/o notas."""
+    notes: str | None = None
+    items: list[SaleItemCreate] | None = None
 
 
 class SaleRead(BaseModel):
@@ -47,6 +61,7 @@ class SaleRead(BaseModel):
     patient_name: str | None
     owner_id: UUID | None
     owner_name: str | None
+    status: SaleStatus
     total: Decimal
     notes: str | None
     created_at: datetime

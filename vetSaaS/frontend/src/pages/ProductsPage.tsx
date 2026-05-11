@@ -27,11 +27,13 @@ interface ProductForm {
   cost: string
   min_stock: string
   description: string
+  is_medication: boolean
 }
 
 const EMPTY_PRODUCT: ProductForm = {
   name: "", category_id: "", sku: "", unit: "unidad",
   price: "", cost: "", min_stock: "0", description: "",
+  is_medication: false,
 }
 
 interface MovementForm {
@@ -130,6 +132,7 @@ export function ProductsPage() {
       sku: p.sku ?? "", unit: p.unit,
       price: String(p.price), cost: p.cost != null ? String(p.cost) : "",
       min_stock: String(p.min_stock), description: p.description ?? "",
+      is_medication: p.is_medication,
     })
     setFormError(""); setFormOpen(true)
   }
@@ -149,6 +152,7 @@ export function ProductsPage() {
       cost: form.cost ? parseFloat(form.cost) : null,
       min_stock: parseFloat(form.min_stock) || 0,
       description: form.description || null,
+      is_medication: form.is_medication,
     }
     if (editing) updateProduct.mutate({ id: editing.id, d: payload })
     else createProduct.mutate(payload)
@@ -401,6 +405,21 @@ export function ProductsPage() {
             <div className="col-span-2 space-y-1.5">
               <Label htmlFor="p-desc">Descripción</Label>
               <Input id="p-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            </div>
+            <div className="col-span-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.is_medication}
+                  onChange={(e) => setForm({ ...form, is_medication: e.target.checked })}
+                />
+                <span className="text-sm">
+                  Es medicamento
+                  <span className="text-xs text-muted-foreground ml-1.5">
+                    (aparece en el selector de prescripciones del expediente)
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
           {formError && <p className="text-sm text-destructive">{formError}</p>}

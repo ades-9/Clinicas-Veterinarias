@@ -31,6 +31,7 @@ class PatientRead(BaseModel):
     lifestyle_notes: str | None
     grooming_preferences: str | None
     vaccination_code: str | None
+    photo_url: str | None
     notes: str | None
     created_at: datetime
 

@@ -106,7 +106,8 @@ interface Props {
   existingAppointments: Appointment[]
   services: AppointmentService[]
   excludeAppointmentId?: string
-  selectedServiceId?: string | null
+  /** IDs de los servicios de la nueva cita; se marca conflicto si una cita existente comparte alguno. */
+  selectedServiceIds?: string[]
   selectedAssigneeId?: string | null
 }
 
@@ -119,11 +120,13 @@ export function DayTimeline({
   existingAppointments,
   services,
   excludeAppointmentId,
-  selectedServiceId,
+  selectedServiceIds = [],
   selectedAssigneeId,
 }: Props) {
   const dateKey = date.toLocaleDateString("en-CA")
-  const serviceById = new Map(services.map((s) => [s.id, s]))
+  // services prop ya no se usa para resolver duraciones (ahora viene en a.total_duration_minutes),
+  // pero se mantiene por compatibilidad de prop con el caller.
+  void services
 
   const dayAppts = existingAppointments.filter((a) => {
     if (a.id === excludeAppointmentId) return false
@@ -141,15 +144,20 @@ export function DayTimeline({
   // Construir lista cruda de bloques
   const rawBlocks: RawBlock[] = []
   for (const a of dayAppts) {
-    const dur = serviceById.get(a.service_id)?.duration_minutes ?? 30
+    const dur =
+      a.total_duration_minutes ||
+      a.services.reduce((acc, s) => acc + s.duration_minutes, 0) ||
+      30
     const start = minutesInDay(a.scheduled_at)
     const end = start + dur
+    const sharesService =
+      selectedServiceIds.length > 0 &&
+      a.services.some((s) => selectedServiceIds.includes(s.id))
     const isConflict =
       !!newBlock &&
       start < newBlock.endMin &&
       newBlock.startMin < end &&
-      ((!!selectedServiceId && a.service_id === selectedServiceId) ||
-        (!!selectedAssigneeId && a.assigned_user_id === selectedAssigneeId))
+      (sharesService || (!!selectedAssigneeId && a.assigned_user_id === selectedAssigneeId))
     rawBlocks.push({
       key: a.id,
       startMin: start,
@@ -237,9 +245,12 @@ export function DayTimeline({
             const padding = isCompact ? "px-2 py-0.5" : "px-2 py-1"
 
             // Estilos por tipo
+            const isEmergency = b.appt?.is_emergency === true
             let className = `absolute rounded ${padding} overflow-hidden`
             if (b.isNew) {
               className += " bg-primary text-primary-foreground shadow-md ring-2 ring-primary/40 z-10"
+            } else if (isEmergency) {
+              className += " bg-destructive/20 border-2 border-destructive text-destructive font-medium"
             } else if (b.isConflict) {
               className += " bg-destructive/15 border border-destructive text-destructive"
             } else {
@@ -262,7 +273,7 @@ export function DayTimeline({
                 }}
                 title={
                   b.appt
-                    ? `${b.appt.patient_name} · ${b.appt.service_name} · ${b.appt.assigned_user_name} · ${formatHHMM(b.startMin)}–${formatHHMM(b.endMin)}`
+                    ? `${b.appt.patient_name} · ${b.appt.services.map((s) => s.name).join(" + ")} · ${b.appt.assigned_user_name} · ${formatHHMM(b.startMin)}–${formatHHMM(b.endMin)}`
                     : `Nueva cita · ${formatHHMM(b.startMin)}–${formatHHMM(b.endMin)}`
                 }
               >
@@ -270,7 +281,7 @@ export function DayTimeline({
                   <p className="text-[11px] font-medium leading-tight truncate">
                     {b.isNew
                       ? `${formatHHMM(b.startMin)}–${formatHHMM(b.endMin)} · Nueva`
-                      : `${b.appt!.patient_name} · ${b.appt!.service_name}`}
+                      : `${b.appt!.patient_name} · ${b.appt!.services.map((s) => s.name).join(" + ")}`}
                   </p>
                 ) : b.isNew ? (
                   <>
@@ -285,7 +296,7 @@ export function DayTimeline({
                       {b.appt!.patient_name}
                     </p>
                     <p className="text-[11px] leading-tight truncate opacity-75">
-                      {b.appt!.service_name}
+                      {b.appt!.services.map((s) => s.name).join(" + ")}
                     </p>
                   </>
                 )}

@@ -1,8 +1,11 @@
 import { useUser } from "@clerk/clerk-react"
 import { useQuery } from "@tanstack/react-query"
-import { Calendar, CheckCircle2, Clock, PawPrint } from "lucide-react"
+import { AlertCircle, Calendar, CheckCircle2, Clock, PawPrint } from "lucide-react"
+import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useApiClient } from "@/api/client"
+import { EmergencyDialog } from "@/components/EmergencyDialog"
+import { RemindersPanel } from "@/components/RemindersPanel"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { Appointment, AppointmentStatus } from "@/types"
@@ -82,7 +85,7 @@ function ApptRow({ appt }: { appt: Appointment }) {
       </td>
       <td className="px-4 py-3 font-medium text-sm">{appt.patient_name}</td>
       <td className="px-4 py-3 text-sm text-muted-foreground">{appt.owner_name}</td>
-      <td className="px-4 py-3 text-sm text-muted-foreground">{appt.service_name}</td>
+      <td className="px-4 py-3 text-sm text-muted-foreground">{appt.services.map((s) => s.name).join(" + ")}</td>
       <td className="px-4 py-3 text-sm text-muted-foreground">{appt.assigned_user_name}</td>
       <td className="px-4 py-3">
         <Badge variant={STATUS_VARIANT[appt.status]}>{STATUS_LABELS[appt.status]}</Badge>
@@ -97,6 +100,7 @@ export function DashboardPage() {
   const { user } = useUser()
   const api = useApiClient()
   const navigate = useNavigate()
+  const [emergencyOpen, setEmergencyOpen] = useState(false)
 
   const today = todayRange()
   const upcoming = upcomingRange()
@@ -149,11 +153,20 @@ export function DashboardPage() {
           </h1>
           <p className="text-sm text-muted-foreground capitalize">{todayLabel}</p>
         </div>
-        <Button onClick={() => navigate("/appointments")}>
-          <Calendar className="h-4 w-4" />
-          Nueva cita
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="destructive" onClick={() => setEmergencyOpen(true)}>
+            <AlertCircle className="h-4 w-4" />
+            Emergencia
+          </Button>
+          <Button onClick={() => navigate("/appointments")}>
+            <Calendar className="h-4 w-4" />
+            Nueva cita
+          </Button>
+        </div>
       </div>
+
+      {/* Recordatorios pendientes */}
+      <RemindersPanel />
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -203,7 +216,7 @@ export function DashboardPage() {
             <thead className="border-b bg-muted/20">
               <tr>
                 <th className="text-left px-4 py-2 font-medium text-muted-foreground text-xs">Hora</th>
-                <th className="text-left px-4 py-2 font-medium text-muted-foreground text-xs">Paciente</th>
+                <th className="text-left px-4 py-2 font-medium text-muted-foreground text-xs">Mascota</th>
                 <th className="text-left px-4 py-2 font-medium text-muted-foreground text-xs">Propietario</th>
                 <th className="text-left px-4 py-2 font-medium text-muted-foreground text-xs">Servicio</th>
                 <th className="text-left px-4 py-2 font-medium text-muted-foreground text-xs">Asignado</th>
@@ -233,7 +246,7 @@ export function DashboardPage() {
                 <tr>
                   <th className="text-left px-4 py-2 font-medium text-muted-foreground text-xs">Fecha</th>
                   <th className="text-left px-4 py-2 font-medium text-muted-foreground text-xs">Hora</th>
-                  <th className="text-left px-4 py-2 font-medium text-muted-foreground text-xs">Paciente</th>
+                  <th className="text-left px-4 py-2 font-medium text-muted-foreground text-xs">Mascota</th>
                   <th className="text-left px-4 py-2 font-medium text-muted-foreground text-xs">Servicio</th>
                   <th className="text-left px-4 py-2 font-medium text-muted-foreground text-xs">Asignado</th>
                   <th className="text-left px-4 py-2 font-medium text-muted-foreground text-xs">Estado</th>
@@ -258,7 +271,7 @@ export function DashboardPage() {
                       })}
                     </td>
                     <td className="px-4 py-3 font-medium text-sm">{appt.patient_name}</td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">{appt.service_name}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{appt.services.map((s) => s.name).join(" + ")}</td>
                     <td className="px-4 py-3 text-sm text-muted-foreground">
                       {appt.assigned_user_name}
                     </td>
@@ -274,6 +287,8 @@ export function DashboardPage() {
           )}
         </div>
       )}
+
+      <EmergencyDialog open={emergencyOpen} onClose={() => setEmergencyOpen(false)} />
     </div>
   )
 }

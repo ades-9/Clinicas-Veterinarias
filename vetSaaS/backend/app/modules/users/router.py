@@ -5,7 +5,7 @@ from app.core.auth import CurrentUser
 from app.core.database import get_db
 from app.core.permissions import require_permission
 from app.modules.users import crud
-from app.modules.users.schemas import RoleRead, UserCreate, UserRead, UserUpdate
+from app.modules.users.schemas import RoleRead, UserCreate, UserCreateResponse, UserRead, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
 roles_router = APIRouter(prefix="/roles", tags=["users"])
@@ -28,7 +28,7 @@ async def get_user(
     return await crud.get_user(user_id, user.clinic_id, session)
 
 
-@router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=UserCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(
     data: UserCreate,
     user: CurrentUser = require_permission("users.create"),

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Pencil, Plus, Search, Trash2 } from "lucide-react"
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { useApiClient } from "@/api/client"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
@@ -43,6 +44,7 @@ const EMPTY: PatientForm = {
 export function PatientsPage() {
   const api = useApiClient()
   const qc = useQueryClient()
+  const navigate = useNavigate()
 
   const [search, setSearch] = useState("")
   const [formOpen, setFormOpen] = useState(false)
@@ -166,12 +168,12 @@ export function PatientsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Pacientes</h1>
-          <p className="text-sm text-muted-foreground">Gestión de pacientes (mascotas)</p>
+          <h1 className="text-2xl font-bold">Mascotas</h1>
+          <p className="text-sm text-muted-foreground">Gestión de mascotas (mascotas)</p>
         </div>
         <Button onClick={openCreate}>
           <Plus className="h-4 w-4" />
-          Nuevo paciente
+          Nuevo mascota
         </Button>
       </div>
 
@@ -203,13 +205,32 @@ export function PatientsPage() {
             ) : patients.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                  {search ? "Sin resultados para la búsqueda" : "No hay pacientes registrados"}
+                  {search ? "Sin resultados para la búsqueda" : "No hay mascotas registrados"}
                 </td>
               </tr>
             ) : (
               patients.map((p) => (
-                <tr key={p.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-3 font-medium">{p.name}</td>
+                <tr
+                  key={p.id}
+                  className="border-b last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/patients/${p.id}`)}
+                >
+                  <td className="px-4 py-3 font-medium">
+                    <div className="flex items-center gap-3">
+                      {p.photo_url ? (
+                        <img
+                          src={p.photo_url}
+                          alt={p.name}
+                          className="h-10 w-10 rounded-full object-cover border bg-muted shrink-0"
+                        />
+                      ) : (
+                        <div className="h-10 w-10 rounded-full border bg-muted flex items-center justify-center text-xs font-semibold text-muted-foreground shrink-0">
+                          {p.name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <span>{p.name}</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {[p.species_name, p.breed_name].filter(Boolean).join(" · ") || "—"}
                   </td>
@@ -221,14 +242,21 @@ export function PatientsPage() {
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
                       <button
-                        onClick={() => openEdit(p)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openEdit(p)
+                        }}
                         className="rounded p-1.5 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
                         title="Editar"
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => { setError(""); setDeleteTarget(p) }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setError("")
+                          setDeleteTarget(p)
+                        }}
                         className="rounded p-1.5 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                         title="Eliminar"
                       >
@@ -244,7 +272,7 @@ export function PatientsPage() {
       </div>
 
       {/* Crear / Editar */}
-      <Dialog open={formOpen} onClose={closeForm} title={editing ? "Editar paciente" : "Nuevo paciente"} className="max-w-2xl">
+      <Dialog open={formOpen} onClose={closeForm} title={editing ? "Editar mascota" : "Nuevo mascota"} className="max-w-2xl">
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Datos generales */}
           <div className="space-y-3">
@@ -387,14 +415,14 @@ export function PatientsPage() {
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
             <Button type="submit" disabled={isSaving}>
-              {isSaving ? "Guardando..." : editing ? "Guardar cambios" : "Crear paciente"}
+              {isSaving ? "Guardando..." : editing ? "Guardar cambios" : "Crear mascota"}
             </Button>
           </div>
         </form>
       </Dialog>
 
       {/* Confirmar eliminación */}
-      <Dialog open={deleteTarget !== null} onClose={() => setDeleteTarget(null)} title="Eliminar paciente">
+      <Dialog open={deleteTarget !== null} onClose={() => setDeleteTarget(null)} title="Eliminar mascota">
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
             ¿Eliminar a <span className="font-medium text-foreground">{deleteTarget?.name}</span>?

@@ -3,12 +3,18 @@ import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi import status as http_status
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import CurrentUser
-from app.core.database import get_db
+from app.core.database import get_db, set_rls_context
 from app.core.permissions import require_permission
-from app.core.storage import medical_record_attachment_key, upload_file
+from app.core.storage import (
+    deworming_photo_key,
+    medical_record_attachment_key,
+    upload_file,
+    vaccination_photo_key,
+)
 from app.modules.medical_records import crud
 from app.modules.medical_records.schemas import (
     AttachmentRead,
@@ -35,12 +41,17 @@ _ALLOWED_ATTACHMENT_TYPES = {
 @router.get("", response_model=list[MedicalRecordRead])
 async def list_records(
     patient_id: str | None = Query(default=None),
+    service_type: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     user: CurrentUser = require_permission("medical_records.view"),
     session: AsyncSession = Depends(get_db),
 ):
-    return await crud.list_records(user.clinic_id, session, patient_id=patient_id, limit=limit, offset=offset)
+    return await crud.list_records(
+        user.clinic_id, session,
+        patient_id=patient_id, service_type=service_type,
+        limit=limit, offset=offset,
+    )
 
 
 @router.get("/{record_id}", response_model=MedicalRecordRead)
@@ -91,13 +102,34 @@ async def upload_attachment(
 
 
 @router.post("/{record_id}/vaccinations", response_model=VaccinationRead, status_code=http_status.HTTP_201_CREATED)
-async def add_vaccination(
+async def add_vaccination_to_record(
     record_id: str,
     data: VaccinationCreate,
     user: CurrentUser = require_permission("medical_records.edit"),
     session: AsyncSession = Depends(get_db),
 ):
-    return await crud.add_vaccination(record_id, user.clinic_id, data, session)
+    return await crud.add_vaccination_to_record(record_id, user.clinic_id, data, session)
+
+
+@patient_history_router.post(
+    "/{patient_id}/vaccinations", response_model=VaccinationRead, status_code=http_status.HTTP_201_CREATED
+)
+async def add_vaccination_to_patient(
+    patient_id: str,
+    data: VaccinationCreate,
+    user: CurrentUser = require_permission("medical_records.edit"),
+    session: AsyncSession = Depends(get_db),
+):
+    return await crud.add_vaccination_to_patient(patient_id, user.clinic_id, data, session)
+
+
+@patient_history_router.get("/{patient_id}/vaccinations", response_model=list[VaccinationRead])
+async def list_patient_vaccinations(
+    patient_id: str,
+    user: CurrentUser = require_permission("medical_records.view"),
+    session: AsyncSession = Depends(get_db),
+):
+    return await crud.list_patient_vaccinations(patient_id, user.clinic_id, session)
 
 
 # ── Dewormings ────────────────────────────────────────────────────────────────
@@ -164,3 +196,68 @@ async def list_patient_surgeries(
     session: AsyncSession = Depends(get_db),
 ):
     return await crud.list_patient_surgeries(patient_id, user.clinic_id, session)
+
+
+# ── Photo upload helpers ──────────────────────────────────────────────────────
+
+_ALLOWED_PHOTO_TYPES = {"image/png", "image/jpeg", "image/webp"}
+
+
+async def _upload_label_photo(
+    table: str,
+    row_id: str,
+    clinic_id: str,
+    file: UploadFile,
+    key_builder,
+    session: AsyncSession,
+) -> str:
+    if file.content_type not in _ALLOWED_PHOTO_TYPES:
+        raise HTTPException(
+            status_code=http_status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Solo se permiten imágenes (PNG, JPEG, WebP)",
+        )
+    await set_rls_context(session, clinic_id)
+    check = await session.execute(
+        text(f"SELECT 1 FROM {table} WHERE id = :id AND deleted_at IS NULL"),
+        {"id": row_id},
+    )
+    if check.scalar() is None:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Registro no encontrado")
+
+    content = await file.read()
+    unique_name = f"{uuid.uuid4()}_{file.filename}"
+    key = key_builder(clinic_id, row_id, unique_name)
+    file_url = await asyncio.to_thread(upload_file, content, key, file.content_type)
+
+    await session.execute(
+        text(f"UPDATE {table} SET photo_url = :url WHERE id = :id"),
+        {"url": file_url, "id": row_id},
+    )
+    await session.commit()
+    return file_url
+
+
+@router.post("/vaccinations/{vaccination_id}/photo")
+async def upload_vaccination_photo(
+    vaccination_id: str,
+    file: UploadFile = File(...),
+    user: CurrentUser = require_permission("medical_records.edit"),
+    session: AsyncSession = Depends(get_db),
+):
+    url = await _upload_label_photo(
+        "vaccinations", vaccination_id, user.clinic_id, file, vaccination_photo_key, session
+    )
+    return {"photo_url": url}
+
+
+@router.post("/dewormings/{deworming_id}/photo")
+async def upload_deworming_photo(
+    deworming_id: str,
+    file: UploadFile = File(...),
+    user: CurrentUser = require_permission("medical_records.edit"),
+    session: AsyncSession = Depends(get_db),
+):
+    url = await _upload_label_photo(
+        "dewormings", deworming_id, user.clinic_id, file, deworming_photo_key, session
+    )
+    return {"photo_url": url}

@@ -13,18 +13,31 @@ class VaccinationRead(BaseModel):
     clinic_id: UUID
     patient_id: UUID
     medical_record_id: UUID | None
+    vaccine_type_id: UUID | None
     vaccine_name: str
+    manufacturer: str | None
     applied_at: date
     next_dose_at: date | None
     batch_number: str | None
+    expiration_date: date | None
+    weight_at_application: Decimal | None
+    photo_url: str | None
+    applied_externally: bool
+    external_clinic_name: str | None
     created_at: datetime
 
 
 class VaccinationCreate(BaseModel):
+    vaccine_type_id: str | None = None
     vaccine_name: str
+    manufacturer: str | None = None
     applied_at: date
     next_dose_at: date | None = None
     batch_number: str | None = None
+    expiration_date: date | None = None
+    weight_at_application: Decimal | None = None
+    applied_externally: bool = False
+    external_clinic_name: str | None = None
 
 
 class DewormingRead(BaseModel):
@@ -33,23 +46,32 @@ class DewormingRead(BaseModel):
     patient_id: UUID
     medical_record_id: UUID | None
     product_name: str
+    manufacturer: str | None
     treatment_type: DewormingType
     applied_at: date
     next_dose_at: date | None
     weight_at_application: Decimal | None
     batch_number: str | None
+    expiration_date: date | None
     notes: str | None
+    photo_url: str | None
+    applied_externally: bool
+    external_clinic_name: str | None
     created_at: datetime
 
 
 class DewormingCreate(BaseModel):
     product_name: str
+    manufacturer: str | None = None
     treatment_type: DewormingType
     applied_at: date
     next_dose_at: date | None = None
     weight_at_application: Decimal | None = None
     batch_number: str | None = None
+    expiration_date: date | None = None
     notes: str | None = None
+    applied_externally: bool = False
+    external_clinic_name: str | None = None
 
 
 class SurgeryRead(BaseModel):
@@ -62,6 +84,8 @@ class SurgeryRead(BaseModel):
     veterinarian_name: str | None
     description: str | None
     complications: str | None
+    applied_externally: bool
+    external_clinic_name: str | None
     created_at: datetime
 
 
@@ -71,6 +95,31 @@ class SurgeryCreate(BaseModel):
     veterinarian_name: str | None = None
     description: str | None = None
     complications: str | None = None
+    applied_externally: bool = False
+    external_clinic_name: str | None = None
+
+
+class PrescriptionItemRead(BaseModel):
+    id: UUID
+    clinic_id: UUID
+    medical_record_id: UUID
+    product_id: UUID | None
+    product_name: str | None  # del JOIN
+    custom_name: str | None
+    dose: str | None
+    frequency: str | None
+    duration: str | None
+    notes: str | None
+    created_at: datetime
+
+
+class PrescriptionItemCreate(BaseModel):
+    product_id: str | None = None
+    custom_name: str | None = None
+    dose: str | None = None
+    frequency: str | None = None
+    duration: str | None = None
+    notes: str | None = None
 
 
 class AttachmentRead(BaseModel):
@@ -83,6 +132,9 @@ class AttachmentRead(BaseModel):
     created_at: datetime
 
 
+ServiceArea = Literal["veterinary", "grooming", "aesthetic"]
+
+
 class MedicalRecordRead(BaseModel):
     id: UUID
     clinic_id: UUID
@@ -91,6 +143,7 @@ class MedicalRecordRead(BaseModel):
     veterinarian_id: UUID
     veterinarian_name: str
     appointment_id: UUID | None
+    appointment_service_type: ServiceArea | None  # área de la cita asociada (si existe)
     reason: str
     diagnosis: str | None
     treatment: str | None
@@ -106,6 +159,7 @@ class MedicalRecordRead(BaseModel):
     vaccinations: list[VaccinationRead] = []
     dewormings: list[DewormingRead] = []
     surgeries: list[SurgeryRead] = []
+    prescription_items: list[PrescriptionItemRead] = []
     attachments: list[AttachmentRead] = []
 
 
@@ -124,6 +178,7 @@ class MedicalRecordCreate(BaseModel):
     physical_exam: str | None = None
     visit_date: datetime | None = None
     vaccinations: list[VaccinationCreate] = []
+    prescription_items: list[PrescriptionItemCreate] = []
 
 
 class MedicalRecordUpdate(BaseModel):
