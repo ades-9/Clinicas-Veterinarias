@@ -11,7 +11,8 @@
       "Bash(uvicorn app.main:app --reload --port 8000)",
       "Bash(npm run *)",
       "Bash(alembic upgrade *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(dir vetSaaS\\\\backend\\\\app\\\\modules\\\\reports *)"
     ]
   }
 }

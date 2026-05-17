@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from sqlalchemy import text
@@ -8,6 +8,8 @@ from app.core.database import set_rls_context
 from app.modules.reports.schemas import ProfessionalMetrics, ProfessionalPerformanceReport
 
 
+# `:date_to_exclusive` se calcula como `date_to + 1 día` en Python para evitar
+# usar el cast `::date` en SQL, que SQLAlchemy interpreta como bindparam `:date`.
 _QUERY = """
     WITH appts AS (
         SELECT a.assigned_user_id AS user_id,
@@ -16,7 +18,7 @@ _QUERY = """
         FROM appointments a
         WHERE a.deleted_at IS NULL
           AND a.scheduled_at >= :date_from
-          AND a.scheduled_at < (:date_to::date + INTERVAL '1 day')
+          AND a.scheduled_at < :date_to_exclusive
         GROUP BY a.assigned_user_id
     ),
     consults AS (
@@ -25,7 +27,7 @@ _QUERY = """
         FROM medical_records mr
         WHERE mr.deleted_at IS NULL
           AND mr.visit_date >= :date_from
-          AND mr.visit_date < (:date_to::date + INTERVAL '1 day')
+          AND mr.visit_date < :date_to_exclusive
         GROUP BY mr.veterinarian_id
     ),
     items AS (
@@ -48,7 +50,7 @@ _QUERY = """
         WHERE s.deleted_at IS NULL
           AND s.status = 'completed'
           AND s.created_at >= :date_from
-          AND s.created_at < (:date_to::date + INTERVAL '1 day')
+          AND s.created_at < :date_to_exclusive
           AND si.professional_user_id IS NOT NULL
         GROUP BY si.professional_user_id
     )
@@ -83,7 +85,7 @@ async def professional_performance(
     await set_rls_context(session, clinic_id)
     result = await session.execute(
         text(_QUERY),
-        {"date_from": date_from, "date_to": date_to},
+        {"date_from": date_from, "date_to_exclusive": date_to + timedelta(days=1)},
     )
     professionals = [ProfessionalMetrics(**row) for row in result.mappings()]
     return ProfessionalPerformanceReport(
