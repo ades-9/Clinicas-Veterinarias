@@ -12,21 +12,53 @@ import {
   Users,
 } from "lucide-react"
 import { NavLink, Outlet } from "react-router-dom"
+import { usePermissions } from "@/hooks/usePermissions"
 import { cn } from "@/lib/utils"
 
-const NAV_ITEMS = [
+// Cada item declara qué permiso necesita para aparecer. Dashboard se muestra
+// siempre (es la landing tras login). `requires` puede ser un permiso o una
+// lista de permisos OR-eados.
+const NAV_ITEMS: {
+  to: string
+  icon: typeof LayoutDashboard
+  label: string
+  requires?: string | string[]
+}[] = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/owners", icon: Users, label: "Propietarios" },
-  { to: "/patients", icon: PawPrint, label: "Mascotas" },
-  { to: "/appointments", icon: Calendar, label: "Citas" },
-  { to: "/medical-records", icon: Stethoscope, label: "Historia Clínica" },
-  { to: "/products", icon: Package, label: "Inventario" },
-  { to: "/sales", icon: ShoppingCart, label: "Ventas" },
-  { to: "/reports", icon: BarChart3, label: "Reportes" },
-  { to: "/configuration", icon: Cog, label: "Configuración" },
+  { to: "/owners", icon: Users, label: "Propietarios", requires: "owners.view" },
+  { to: "/patients", icon: PawPrint, label: "Mascotas", requires: "patients.view" },
+  {
+    to: "/appointments",
+    icon: Calendar,
+    label: "Citas",
+    requires: ["appointments.view_all", "appointments.view_own"],
+  },
+  {
+    to: "/medical-records",
+    icon: Stethoscope,
+    label: "Historia Clínica",
+    requires: "medical_records.view",
+  },
+  { to: "/products", icon: Package, label: "Inventario", requires: "products.view" },
+  { to: "/sales", icon: ShoppingCart, label: "Ventas", requires: "sales.view" },
+  {
+    to: "/reports",
+    icon: BarChart3,
+    label: "Reportes",
+    requires: ["reports.view_general", "reports.view_own"],
+  },
+  { to: "/configuration", icon: Cog, label: "Configuración", requires: "configuration.view" },
 ]
 
 export function AppLayout() {
+  const { canAny } = usePermissions()
+
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if (!item.requires) return true
+    const actions = Array.isArray(item.requires) ? item.requires : [item.requires]
+    return canAny(actions)
+  })
+
   return (
     <div className="flex h-screen overflow-hidden">
       <aside className="flex w-60 flex-col border-r bg-card">
@@ -37,7 +69,7 @@ export function AppLayout() {
           </span>
         </div>
         <nav className="flex-1 space-y-1 px-3 py-4">
-          {NAV_ITEMS.map(({ to, icon: Icon, label }) => (
+          {visibleItems.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}

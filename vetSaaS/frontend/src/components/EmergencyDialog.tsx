@@ -89,19 +89,13 @@ export function EmergencyDialog({ open, onClose }: Props) {
     if (!assignee) { setError("Selecciona el profesional"); return }
     if (!serviceId) { setError("Selecciona el servicio"); return }
 
-    // scheduled_at = ahora (formato local ISO sin TZ, igual que las citas normales)
-    const now = new Date()
-    const p = (n: number) => String(n).padStart(2, "0")
-    const scheduledAt =
-      `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}` +
-      `T${p(now.getHours())}:${p(now.getMinutes())}:${p(now.getSeconds())}`
-
+    // scheduled_at = ahora, en UTC ISO (TIMESTAMPTZ en backend)
     mutation.mutate({
       patient_id: patient.id,
       owner_id: owner.id,
       assigned_user_id: assignee.id,
       service_ids: [serviceId],
-      scheduled_at: scheduledAt,
+      scheduled_at: new Date().toISOString(),
       notes: notes || "EMERGENCIA",
       is_emergency: true,
     })

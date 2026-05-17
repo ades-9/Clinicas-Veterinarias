@@ -11,18 +11,15 @@ import { Button } from "@/components/ui/button"
 import type { Appointment, AppointmentStatus } from "@/types"
 
 // ── Helpers de fecha ──────────────────────────────────────────────────────────
-
-function toISOLocal(date: Date) {
-  const p = (n: number) => String(n).padStart(2, "0")
-  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}`
-}
+// scheduled_at viaja en UTC (TIMESTAMPTZ en el backend); construimos los
+// límites del rango en hora local y los convertimos con toISOString().
 
 function todayRange() {
   const start = new Date()
   start.setHours(0, 0, 0, 0)
   const end = new Date()
   end.setHours(23, 59, 59, 999)
-  return { from: toISOLocal(start), to: toISOLocal(end) }
+  return { from: start.toISOString(), to: end.toISOString() }
 }
 
 function upcomingRange() {
@@ -32,7 +29,7 @@ function upcomingRange() {
   const end = new Date()
   end.setDate(end.getDate() + 7)
   end.setHours(23, 59, 59, 999)
-  return { from: toISOLocal(start), to: toISOLocal(end) }
+  return { from: start.toISOString(), to: end.toISOString() }
 }
 
 // ── Status badges ─────────────────────────────────────────────────────────────

@@ -7,7 +7,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import set_rls_context
-from app.modules.users.schemas import RoleRead, UserCreate, UserCreateResponse, UserRead, UserUpdate
+from app.modules.users.schemas import (
+    MeRead,
+    PermissionCatalogItem,
+    RolePermissionsRead,
+    RolePermissionsUpdate,
+    RoleRead,
+    UserCreate,
+    UserCreateResponse,
+    UserRead,
+    UserUpdate,
+)
 
 _USER_SELECT = """
     SELECT u.id, u.clinic_id, u.role_id, r.name AS role_name,
@@ -176,6 +186,101 @@ async def update_user(user_id: str, clinic_id: str, data: UserUpdate, session: A
 
     await session.commit()
     return await get_user(user_id, clinic_id, session)
+
+
+async def get_me(clinic_id: str, clerk_user_id: str, role_name: str, session: AsyncSession) -> MeRead:
+    """Devuelve el usuario autenticado + sus permisos efectivos.
+
+    Si el rol es 'superadmin' (plataforma), devuelve todos los permisos del catálogo.
+    """
+    await set_rls_context(session, clinic_id)
+    result = await session.execute(
+        text(f"{_USER_SELECT} WHERE u.clerk_user_id = :clerk_user_id AND u.deleted_at IS NULL"),
+        {"clerk_user_id": clerk_user_id},
+    )
+    row = result.mappings().first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+    user = UserRead(**row)
+
+    if role_name == "superadmin":
+        perms_result = await session.execute(text("SELECT action FROM permissions"))
+    else:
+        perms_result = await session.execute(
+            text("""
+                SELECT p.action
+                FROM permissions p
+                JOIN role_permissions rp ON rp.permission_id = p.id
+                WHERE rp.role_id = :role_id
+            """),
+            {"role_id": str(user.role_id)},
+        )
+    permissions = [r[0] for r in perms_result.all()]
+    return MeRead(user=user, permissions=permissions)
+
+
+async def list_permissions_catalog(session: AsyncSession) -> list[PermissionCatalogItem]:
+    result = await session.execute(text("SELECT action FROM permissions ORDER BY action"))
+    return [PermissionCatalogItem(action=r[0]) for r in result.all()]
+
+
+async def get_role_permissions(role_id: str, clinic_id: str, session: AsyncSession) -> RolePermissionsRead:
+    await set_rls_context(session, clinic_id)
+    role = await _get_role(role_id, clinic_id, session)
+    result = await session.execute(
+        text("""
+            SELECT p.action
+            FROM permissions p
+            JOIN role_permissions rp ON rp.permission_id = p.id
+            WHERE rp.role_id = :role_id
+            ORDER BY p.action
+        """),
+        {"role_id": role_id},
+    )
+    perms = [r[0] for r in result.all()]
+    return RolePermissionsRead(role_id=role.id, role_name=role.name, permissions=perms)
+
+
+async def update_role_permissions(
+    role_id: str, clinic_id: str, data: RolePermissionsUpdate, session: AsyncSession
+) -> RolePermissionsRead:
+    await set_rls_context(session, clinic_id)
+    role = await _get_role(role_id, clinic_id, session)
+
+    if role.name == "admin":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El rol administrador no puede modificar sus propios permisos",
+        )
+
+    # Validar que todos los permisos existan
+    if data.permissions:
+        check = await session.execute(
+            text("SELECT action FROM permissions WHERE action = ANY(:actions)"),
+            {"actions": data.permissions},
+        )
+        valid = {r[0] for r in check.all()}
+        invalid = set(data.permissions) - valid
+        if invalid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Permisos inválidos: {sorted(invalid)}",
+            )
+
+    await session.execute(
+        text("DELETE FROM role_permissions WHERE role_id = :role_id"),
+        {"role_id": role_id},
+    )
+    if data.permissions:
+        await session.execute(
+            text("""
+                INSERT INTO role_permissions (role_id, permission_id)
+                SELECT :role_id, id FROM permissions WHERE action = ANY(:actions)
+            """),
+            {"role_id": role_id, "actions": data.permissions},
+        )
+    await session.commit()
+    return await get_role_permissions(role_id, clinic_id, session)
 
 
 async def deactivate_user(user_id: str, clinic_id: str, current_clerk_user_id: str, session: AsyncSession) -> None:

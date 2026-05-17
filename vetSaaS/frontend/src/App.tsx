@@ -1,5 +1,6 @@
 import { RedirectToSignIn, SignedIn, SignedOut } from "@clerk/clerk-react"
 import { Navigate, Route, Routes } from "react-router-dom"
+import { ProtectedRoute } from "@/components/ProtectedRoute"
 import { useOnboarding } from "@/hooks/useOnboarding"
 import { AppLayout } from "@/layouts/AppLayout"
 import { AppointmentsPage } from "@/pages/AppointmentsPage"
@@ -40,15 +41,78 @@ function AuthenticatedApp() {
       <Route element={<AppLayout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/owners" element={<OwnersPage />} />
-        <Route path="/patients" element={<PatientsPage />} />
-        <Route path="/patients/:id" element={<PatientDetailPage />} />
-        <Route path="/appointments" element={<AppointmentsPage />} />
-        <Route path="/medical-records" element={<MedicalRecordsPage />} />
-        <Route path="/products" element={<ProductsPage />} />
-        <Route path="/sales" element={<SalesPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/configuration" element={<ConfigurationPage />} />
+        <Route
+          path="/owners"
+          element={
+            <ProtectedRoute requires="owners.view">
+              <OwnersPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patients"
+          element={
+            <ProtectedRoute requires="patients.view">
+              <PatientsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patients/:id"
+          element={
+            <ProtectedRoute requires="patients.view">
+              <PatientDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/appointments"
+          element={
+            <ProtectedRoute requires={["appointments.view_all", "appointments.view_own"]}>
+              <AppointmentsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/medical-records"
+          element={
+            <ProtectedRoute requires="medical_records.view">
+              <MedicalRecordsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/products"
+          element={
+            <ProtectedRoute requires="products.view">
+              <ProductsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/sales"
+          element={
+            <ProtectedRoute requires="sales.view">
+              <SalesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <ProtectedRoute requires={["reports.view_general", "reports.view_own"]}>
+              <ReportsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/configuration"
+          element={
+            <ProtectedRoute requires="configuration.view">
+              <ConfigurationPage />
+            </ProtectedRoute>
+          }
+        />
       </Route>
       {/* Ruta fuera del AppLayout: sin menú lateral, optimizada para imprimir */}
       <Route path="/patients/:id/carnet" element={<PatientCarnetPage />} />

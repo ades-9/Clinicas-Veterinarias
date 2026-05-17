@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AlertTriangle, Package, Pencil, Plus, Search, Trash2, TrendingDown, TrendingUp } from "lucide-react"
 import { useState } from "react"
 import { useApiClient } from "@/api/client"
+import { usePermissions } from "@/hooks/usePermissions"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
@@ -49,6 +50,7 @@ const EMPTY_MOVEMENT: MovementForm = { movement_type: "entry", quantity: "", rea
 export function ProductsPage() {
   const api = useApiClient()
   const qc = useQueryClient()
+  const { can } = usePermissions()
 
   const [search, setSearch] = useState("")
   const [lowStock, setLowStock] = useState(false)
@@ -183,10 +185,12 @@ export function ProductsPage() {
           <h1 className="text-2xl font-bold">Inventario</h1>
           <p className="text-sm text-muted-foreground">Productos y movimientos de stock</p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="h-4 w-4" />
-          Nuevo producto
-        </Button>
+        {can("products.manage") && (
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4" />
+            Nuevo producto
+          </Button>
+        )}
       </div>
 
       {/* tabs */}

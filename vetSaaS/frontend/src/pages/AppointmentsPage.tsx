@@ -3,6 +3,7 @@ import { CalendarDays, List, Pencil, PlayCircle, Plus, User as UserIcon, PawPrin
 import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import { useApiClient } from "@/api/client"
+import { usePermissions } from "@/hooks/usePermissions"
 import { AppointmentCalendar, getWeekStart, addDays } from "@/components/AppointmentCalendar"
 import { AssigneeCombobox } from "@/components/AssigneeCombobox"
 import { ConsultationModal } from "@/components/ConsultationModal"
@@ -47,9 +48,9 @@ const STATUS_VARIANT: Record<AppointmentStatus, BadgeVariant> = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function toISOLocal(date: Date) {
-  const p = (n: number) => String(n).padStart(2, "0")
-  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}`
+// scheduled_at viaja en UTC porque la columna es TIMESTAMPTZ.
+function toUTCISO(date: Date) {
+  return date.toISOString()
 }
 
 // ── Form types ────────────────────────────────────────────────────────────────
@@ -91,6 +92,7 @@ function shiftDate(yyyymmdd: string, days: number): string {
 export function AppointmentsPage() {
   const api = useApiClient()
   const queryClient = useQueryClient()
+  const { can } = usePermissions()
 
   const [viewMode, setViewMode] = useState<"table" | "calendar">("table")
   const [calWeekStart, setCalWeekStart] = useState(() => getWeekStart(new Date()))
@@ -125,7 +127,7 @@ export function AppointmentsPage() {
     queryKey: ["appointments-calendar", calWeekStart.toISOString().slice(0, 10)],
     queryFn: () =>
       api.get<Appointment[]>(
-        `/appointments?date_from=${encodeURIComponent(toISOLocal(calWeekStart))}&date_to=${encodeURIComponent(toISOLocal(calWeekEnd))}&limit=200`
+        `/appointments?date_from=${encodeURIComponent(toUTCISO(calWeekStart))}&date_to=${encodeURIComponent(toUTCISO(calWeekEnd))}&limit=200`
       ),
     enabled: viewMode === "calendar",
     staleTime: 0,
@@ -155,7 +157,7 @@ export function AppointmentsPage() {
     queryKey: ["appointments-day", formDate],
     queryFn: () =>
       api.get<Appointment[]>(
-        `/appointments?date_from=${formDate}T00:00:00&date_to=${formDate}T23:59:59&limit=200`
+        `/appointments?date_from=${encodeURIComponent(new Date(`${formDate}T00:00:00`).toISOString())}&date_to=${encodeURIComponent(new Date(`${formDate}T23:59:59`).toISOString())}&limit=200`
       ),
     enabled: formOpen && !!formDate,
     staleTime: 30_000,
@@ -319,17 +321,17 @@ export function AppointmentsPage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
-    const scheduledAt = form.date && form.time ? `${form.date}T${form.time}:00` : ""
     if (!form.area) { setError("Selecciona un área"); return }
     if (form.service_ids.length === 0) { setError("Selecciona al menos un servicio"); return }
-    if (!scheduledAt) { setError("Selecciona fecha y hora"); return }
+    if (!form.date || !form.time) { setError("Selecciona fecha y hora"); return }
 
+    const scheduledDate = new Date(`${form.date}T${form.time}:00`)
     // Validación: no permitir fecha/hora pasada (tolerancia 1 min)
-    const scheduledDate = new Date(scheduledAt)
     if (scheduledDate.getTime() < Date.now() - 60_000) {
       setError("La cita no puede tener fecha y hora anterior a la actual")
       return
     }
+    const scheduledAt = scheduledDate.toISOString()
 
     if (editing) {
       if (!selectedAssignee && !editing.assigned_user_id) {
@@ -397,10 +399,12 @@ export function AppointmentsPage() {
               Semana
             </button>
           </div>
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4" />
-            Nueva cita
-          </Button>
+          {can("appointments.create") && (
+            <Button onClick={openCreate}>
+              <Plus className="h-4 w-4" />
+              Nueva cita
+            </Button>
+          )}
         </div>
       </div>
 

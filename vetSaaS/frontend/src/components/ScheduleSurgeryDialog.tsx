@@ -95,7 +95,7 @@ export function ScheduleSurgeryDialog({
       owner_id: ownerId,
       assigned_user_id: assignee.id,
       service_ids: serviceIds,
-      scheduled_at: `${date}T${time}:00`,
+      scheduled_at: new Date(`${date}T${time}:00`).toISOString(),
       notes: notes || `Programada desde consulta de ${patientName}`,
     })
   }

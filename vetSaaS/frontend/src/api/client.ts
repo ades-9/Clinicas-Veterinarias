@@ -59,6 +59,15 @@ export function useApiClient() {
       })
     }
 
+    async function put<T>(path: string, body?: unknown): Promise<T> {
+      const token = await getToken()
+      return request<T>(path, {
+        method: "PUT",
+        token: token ?? undefined,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      })
+    }
+
     async function del(path: string): Promise<void> {
       const token = await getToken()
       return request<void>(path, { method: "DELETE", token: token ?? undefined })
@@ -78,6 +87,6 @@ export function useApiClient() {
       return res.json()
     }
 
-    return { get, post, patch, del, upload }
+    return { get, post, patch, put, del, upload }
   }, [getToken])
 }

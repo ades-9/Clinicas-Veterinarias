@@ -43,3 +43,23 @@ class UserCreateResponse(BaseModel):
     pueda compartirla con el invitado (Clerk no envía email automático sin webhooks)."""
     user: UserRead
     temporary_password: str
+
+
+class MeRead(BaseModel):
+    """Identidad + permisos efectivos del usuario autenticado."""
+    user: UserRead
+    permissions: list[str]
+
+
+class RolePermissionsRead(BaseModel):
+    role_id: UUID
+    role_name: str
+    permissions: list[str]
+
+
+class RolePermissionsUpdate(BaseModel):
+    permissions: list[str]
+
+
+class PermissionCatalogItem(BaseModel):
+    action: str

@@ -3,6 +3,7 @@ import { Pencil, Plus, Search, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useApiClient } from "@/api/client"
+import { usePermissions } from "@/hooks/usePermissions"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -45,6 +46,7 @@ export function PatientsPage() {
   const api = useApiClient()
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const { can } = usePermissions()
 
   const [search, setSearch] = useState("")
   const [formOpen, setFormOpen] = useState(false)
@@ -171,10 +173,12 @@ export function PatientsPage() {
           <h1 className="text-2xl font-bold">Mascotas</h1>
           <p className="text-sm text-muted-foreground">Gestión de mascotas (mascotas)</p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="h-4 w-4" />
-          Nuevo mascota
-        </Button>
+        {can("patients.create") && (
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4" />
+            Nuevo mascota
+          </Button>
+        )}
       </div>
 
       <div className="relative">

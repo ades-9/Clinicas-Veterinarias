@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, status
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -294,13 +294,19 @@ async def list_appointments(
         params["assigned_user_id"] = assigned_user_id
     if date_from:
         try:
-            params["date_from"] = datetime.fromisoformat(date_from)
+            dt = datetime.fromisoformat(date_from)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            params["date_from"] = dt
         except ValueError:
             params["date_from"] = date_from
         filters += " AND a.scheduled_at >= :date_from"
     if date_to:
         try:
-            params["date_to"] = datetime.fromisoformat(date_to)
+            dt = datetime.fromisoformat(date_to)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            params["date_to"] = dt
         except ValueError:
             params["date_to"] = date_to
         filters += " AND a.scheduled_at <= :date_to"
@@ -322,12 +328,22 @@ async def list_appointments(
     return [_build_appointment_read(r, services_by_appt.get(str(r["id"]), [])) for r in rows]
 
 
-async def get_appointment(appointment_id: str, clinic_id: str, session: AsyncSession) -> AppointmentRead:
+async def get_appointment(
+    appointment_id: str,
+    clinic_id: str,
+    session: AsyncSession,
+    only_own_clerk_id: str | None = None,
+) -> AppointmentRead:
     await set_rls_context(session, clinic_id)
-    result = await session.execute(
-        text(f"{_APPOINTMENT_SELECT} AND a.id = :id"),
-        {"id": appointment_id},
-    )
+    sql = f"{_APPOINTMENT_SELECT} AND a.id = :id"
+    params: dict = {"id": appointment_id}
+    if only_own_clerk_id:
+        sql += (
+            " AND a.assigned_user_id = ("
+            "SELECT id FROM users WHERE clerk_user_id = :only_own_clerk_id AND deleted_at IS NULL LIMIT 1)"
+        )
+        params["only_own_clerk_id"] = only_own_clerk_id
+    result = await session.execute(text(sql), params)
     row = result.mappings().first()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cita no encontrada")
@@ -369,7 +385,10 @@ async def create_appointment(clinic_id: str, data: AppointmentCreate, session: A
     # Emergencias: salteamos las validaciones de fecha pasada y conflicto.
     # El paciente entra sí o sí; el conflicto se maneja en sala.
     if not data.is_emergency:
-        if data.scheduled_at < datetime.now() - timedelta(minutes=5):
+        scheduled = data.scheduled_at
+        if scheduled.tzinfo is None:
+            scheduled = scheduled.replace(tzinfo=timezone.utc)
+        if scheduled < datetime.now(timezone.utc) - timedelta(minutes=5):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No se pueden crear citas con fecha y hora anterior a la actual",

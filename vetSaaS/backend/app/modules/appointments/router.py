@@ -113,7 +113,8 @@ async def get_appointment(
             status_code=http_status.HTTP_403_FORBIDDEN,
             detail="Permiso requerido: appointments.view_all o appointments.view_own",
         )
-    return await crud.get_appointment(appointment_id, user.clinic_id, session)
+    only_own = None if can_view_all else user.user_id
+    return await crud.get_appointment(appointment_id, user.clinic_id, session, only_own_clerk_id=only_own)
 
 
 @router.post("", response_model=AppointmentRead, status_code=http_status.HTTP_201_CREATED)

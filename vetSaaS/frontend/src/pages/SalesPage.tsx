@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { CreditCard, Minus, Plus, Search, ShoppingCart, Trash2, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useApiClient } from "@/api/client"
+import { usePermissions } from "@/hooks/usePermissions"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
@@ -41,6 +42,7 @@ interface CartItem {
 export function SalesPage() {
   const api = useApiClient()
   const qc = useQueryClient()
+  const { can } = usePermissions()
 
   const [newSaleOpen, setNewSaleOpen] = useState(false)
   const [cart, setCart] = useState<CartItem[]>([])
@@ -239,10 +241,12 @@ export function SalesPage() {
           <h1 className="text-2xl font-bold">Ventas</h1>
           <p className="text-sm text-muted-foreground">Registro de ventas de productos y servicios</p>
         </div>
-        <Button onClick={() => setNewSaleOpen(true)}>
-          <ShoppingCart className="h-4 w-4" />
-          Nueva venta
-        </Button>
+        {can("sales.create") && (
+          <Button onClick={() => setNewSaleOpen(true)}>
+            <ShoppingCart className="h-4 w-4" />
+            Nueva venta
+          </Button>
+        )}
       </div>
 
       {/* Tabs filtro por estado */}

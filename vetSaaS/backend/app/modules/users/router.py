@@ -1,14 +1,33 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import CurrentUser
+from app.core.auth import CurrentUser, get_current_user
 from app.core.database import get_db
 from app.core.permissions import require_permission
 from app.modules.users import crud
-from app.modules.users.schemas import RoleRead, UserCreate, UserCreateResponse, UserRead, UserUpdate
+from app.modules.users.schemas import (
+    MeRead,
+    PermissionCatalogItem,
+    RolePermissionsRead,
+    RolePermissionsUpdate,
+    RoleRead,
+    UserCreate,
+    UserCreateResponse,
+    UserRead,
+    UserUpdate,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
 roles_router = APIRouter(prefix="/roles", tags=["users"])
+auth_router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@auth_router.get("/me", response_model=MeRead)
+async def get_me(
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    return await crud.get_me(user.clinic_id, user.user_id, user.role, session)
 
 
 @router.get("", response_model=list[UserRead])
@@ -62,3 +81,30 @@ async def list_roles(
     session: AsyncSession = Depends(get_db),
 ):
     return await crud.list_roles(user.clinic_id, session)
+
+
+@roles_router.get("/permissions/catalog", response_model=list[PermissionCatalogItem])
+async def list_permissions_catalog(
+    user: CurrentUser = require_permission("roles.view"),
+    session: AsyncSession = Depends(get_db),
+):
+    return await crud.list_permissions_catalog(session)
+
+
+@roles_router.get("/{role_id}/permissions", response_model=RolePermissionsRead)
+async def get_role_permissions(
+    role_id: str,
+    user: CurrentUser = require_permission("roles.view"),
+    session: AsyncSession = Depends(get_db),
+):
+    return await crud.get_role_permissions(role_id, user.clinic_id, session)
+
+
+@roles_router.put("/{role_id}/permissions", response_model=RolePermissionsRead)
+async def update_role_permissions(
+    role_id: str,
+    data: RolePermissionsUpdate,
+    user: CurrentUser = require_permission("roles.edit_permissions"),
+    session: AsyncSession = Depends(get_db),
+):
+    return await crud.update_role_permissions(role_id, user.clinic_id, data, session)

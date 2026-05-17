@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Camera, Copy, ImagePlus, Pencil, Plus, Trash2, UserPlus } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useApiClient } from "@/api/client"
+import { usePermissions } from "@/hooks/usePermissions"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
@@ -927,9 +928,265 @@ function UsersSection() {
   )
 }
 
+// ── Sección de roles y permisos ──────────────────────────────────────────────
+
+interface PermissionCatalogItem {
+  action: string
+}
+
+interface RolePermissionsRead {
+  role_id: string
+  role_name: string
+  permissions: string[]
+}
+
+// Etiquetas legibles para cada permiso del catálogo
+const PERMISSION_LABELS: Record<string, string> = {
+  "configuration.view": "Ver configuración",
+  "configuration.edit": "Editar configuración",
+  "users.view": "Ver usuarios",
+  "users.create": "Crear usuarios",
+  "users.edit": "Editar usuarios",
+  "users.deactivate": "Desactivar usuarios",
+  "roles.view": "Ver roles y permisos",
+  "roles.edit_permissions": "Editar permisos por rol",
+  "owners.view": "Ver propietarios",
+  "owners.create": "Crear propietarios",
+  "owners.edit": "Editar propietarios",
+  "patients.view": "Ver mascotas",
+  "patients.create": "Crear mascotas",
+  "patients.edit": "Editar mascotas",
+  "appointments.view_all": "Ver todas las citas",
+  "appointments.view_own": "Ver solo sus citas",
+  "appointments.create": "Crear citas",
+  "appointments.edit": "Editar citas",
+  "appointments.cancel": "Cancelar citas",
+  "medical_records.view": "Ver historia clínica",
+  "medical_records.create": "Crear historia clínica",
+  "medical_records.edit": "Editar historia clínica",
+  "products.view": "Ver inventario",
+  "products.manage": "Gestionar productos",
+  "products.stock_in": "Cargar stock",
+  "sales.view": "Ver ventas",
+  "sales.create": "Crear ventas",
+  "sales.cancel": "Cancelar ventas",
+  "reports.view_general": "Ver reportes generales",
+  "reports.view_own": "Ver sus propios reportes",
+}
+
+const MODULE_LABELS: Record<string, string> = {
+  configuration: "Configuración",
+  users: "Usuarios",
+  roles: "Roles y permisos",
+  owners: "Propietarios",
+  patients: "Mascotas",
+  appointments: "Citas",
+  medical_records: "Historia clínica",
+  products: "Inventario",
+  sales: "Ventas",
+  reports: "Reportes",
+}
+
+function groupByModule(actions: string[]): Record<string, string[]> {
+  const grouped: Record<string, string[]> = {}
+  for (const action of actions) {
+    const mod = action.split(".")[0]
+    if (!grouped[mod]) grouped[mod] = []
+    grouped[mod].push(action)
+  }
+  return grouped
+}
+
+function RolesSection() {
+  const api = useApiClient()
+  const queryClient = useQueryClient()
+  const [expandedRoleId, setExpandedRoleId] = useState<string | null>(null)
+  const [drafts, setDrafts] = useState<Record<string, Set<string>>>({})
+  const [error, setError] = useState("")
+  const [savedRoleId, setSavedRoleId] = useState<string | null>(null)
+
+  const { data: roles = [] } = useQuery({
+    queryKey: ["roles"],
+    queryFn: () => api.get<Role[]>("/roles"),
+  })
+
+  const { data: catalog = [] } = useQuery({
+    queryKey: ["permissions-catalog"],
+    queryFn: () => api.get<PermissionCatalogItem[]>("/roles/permissions/catalog"),
+  })
+
+  const { data: rolePerms } = useQuery({
+    queryKey: ["role-permissions", expandedRoleId],
+    queryFn: () => api.get<RolePermissionsRead>(`/roles/${expandedRoleId}/permissions`),
+    enabled: !!expandedRoleId,
+  })
+
+  // Cuando llega rolePerms, inicializa el draft del rol expandido
+  useEffect(() => {
+    if (rolePerms && !drafts[rolePerms.role_id]) {
+      setDrafts((d) => ({ ...d, [rolePerms.role_id]: new Set(rolePerms.permissions) }))
+    }
+  }, [rolePerms, drafts])
+
+  const updateMutation = useMutation({
+    mutationFn: ({ roleId, permissions }: { roleId: string; permissions: string[] }) =>
+      api.put<RolePermissionsRead>(`/roles/${roleId}/permissions`, { permissions }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["role-permissions", data.role_id] })
+      queryClient.invalidateQueries({ queryKey: ["auth-me"] })
+      setSavedRoleId(data.role_id)
+      setError("")
+      setTimeout(() => setSavedRoleId(null), 2000)
+    },
+    onError: (e: Error) => setError(e.message),
+  })
+
+  function togglePermission(roleId: string, action: string) {
+    setDrafts((d) => {
+      const current = new Set(d[roleId] ?? [])
+      if (current.has(action)) current.delete(action)
+      else current.add(action)
+      return { ...d, [roleId]: current }
+    })
+  }
+
+  function save(roleId: string) {
+    const draft = drafts[roleId]
+    if (!draft) return
+    updateMutation.mutate({ roleId, permissions: Array.from(draft) })
+  }
+
+  function resetDraft(roleId: string) {
+    setDrafts((d) => {
+      const next = { ...d }
+      delete next[roleId]
+      return next
+    })
+  }
+
+  const grouped = groupByModule(catalog.map((c) => c.action))
+  const moduleOrder = Object.keys(MODULE_LABELS).filter((m) => grouped[m])
+
+  return (
+    <div className="rounded-lg border bg-card p-6 space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">Roles y permisos</h2>
+        <p className="text-sm text-muted-foreground">
+          Define qué puede hacer cada rol dentro de la clínica.
+        </p>
+      </div>
+
+      {error && (
+        <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {roles.map((role) => {
+          const isExpanded = expandedRoleId === role.id
+          const isAdmin = role.name === "admin"
+          const draft = drafts[role.id]
+          const dirty =
+            !!rolePerms &&
+            rolePerms.role_id === role.id &&
+            draft !== undefined &&
+            (draft.size !== rolePerms.permissions.length ||
+              !rolePerms.permissions.every((p) => draft.has(p)))
+
+          return (
+            <div key={role.id} className="rounded-md border">
+              <button
+                type="button"
+                onClick={() => {
+                  setExpandedRoleId(isExpanded ? null : role.id)
+                  if (isExpanded) resetDraft(role.id)
+                }}
+                className="flex w-full items-center justify-between px-4 py-3 hover:bg-accent"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="font-medium capitalize">{role.name}</span>
+                  {isAdmin && (
+                    <Badge variant="default">Acceso total</Badge>
+                  )}
+                  {savedRoleId === role.id && (
+                    <Badge variant="success">Guardado</Badge>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {isExpanded ? "Ocultar" : "Editar"}
+                </span>
+              </button>
+
+              {isExpanded && (
+                <div className="border-t px-4 py-4 space-y-4">
+                  {isAdmin ? (
+                    <p className="text-sm text-muted-foreground">
+                      El rol administrador tiene siempre todos los permisos y no puede modificarse.
+                    </p>
+                  ) : !rolePerms || rolePerms.role_id !== role.id ? (
+                    <p className="text-sm text-muted-foreground">Cargando permisos...</p>
+                  ) : (
+                    <>
+                      {moduleOrder.map((mod) => (
+                        <div key={mod}>
+                          <h3 className="text-sm font-semibold mb-2">
+                            {MODULE_LABELS[mod]}
+                          </h3>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {grouped[mod].map((action) => (
+                              <label
+                                key={action}
+                                className="flex items-center gap-2 text-sm cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={draft?.has(action) ?? false}
+                                  onChange={() => togglePermission(role.id, action)}
+                                  className="h-4 w-4 rounded border-input"
+                                />
+                                <span>{PERMISSION_LABELS[action] ?? action}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+
+                      <div className="flex justify-end gap-2 pt-2 border-t">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => resetDraft(role.id)}
+                          disabled={!dirty || updateMutation.isPending}
+                        >
+                          Descartar cambios
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => save(role.id)}
+                          disabled={!dirty || updateMutation.isPending}
+                        >
+                          {updateMutation.isPending ? "Guardando..." : "Guardar"}
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── Página principal ─────────────────────────────────────────────────────────
 
 export function ConfigurationPage() {
+  const { can } = usePermissions()
   return (
     <div className="space-y-6">
       <div>
@@ -937,7 +1194,8 @@ export function ConfigurationPage() {
         <p className="text-sm text-muted-foreground">Ajustes generales de la clínica</p>
       </div>
       <ClinicSection />
-      <UsersSection />
+      {can("users.view") && <UsersSection />}
+      {can("roles.view") && <RolesSection />}
       <ServicesSection />
     </div>
   )

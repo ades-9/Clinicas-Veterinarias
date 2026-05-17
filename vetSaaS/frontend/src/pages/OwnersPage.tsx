@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Pencil, Plus, Search, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { useApiClient } from "@/api/client"
+import { usePermissions } from "@/hooks/usePermissions"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -26,6 +27,7 @@ const EMPTY: OwnerForm = {
 export function OwnersPage() {
   const api = useApiClient()
   const queryClient = useQueryClient()
+  const { can } = usePermissions()
 
   const [search, setSearch] = useState("")
   const [formOpen, setFormOpen] = useState(false)
@@ -113,10 +115,12 @@ export function OwnersPage() {
           <h1 className="text-2xl font-bold">Propietarios</h1>
           <p className="text-sm text-muted-foreground">Gestión de propietarios de mascotas</p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="h-4 w-4" />
-          Nuevo propietario
-        </Button>
+        {can("owners.create") && (
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4" />
+            Nuevo propietario
+          </Button>
+        )}
       </div>
 
       <div className="relative">
