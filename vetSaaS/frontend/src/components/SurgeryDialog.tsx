@@ -6,6 +6,7 @@ import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/components/ui/toast"
 import type { Surgery } from "@/types"
 
 interface SurgeryForm {
@@ -59,6 +60,7 @@ export function SurgeryDialog({
 }: Props) {
   const api = useApiClient()
   const qc = useQueryClient()
+  const { showSuccess } = useToast()
   const [form, setForm] = useState<SurgeryForm>(EMPTY)
   const [error, setError] = useState("")
 
@@ -78,6 +80,7 @@ export function SurgeryDialog({
       qc.invalidateQueries({ queryKey: ["patient-surgeries", patientId] })
       qc.invalidateQueries({ queryKey: ["medical-records", patientId] })
       onClose()
+      showSuccess("Cirugía registrada")
     },
     onError: (e: Error) => setError(e.message),
   })

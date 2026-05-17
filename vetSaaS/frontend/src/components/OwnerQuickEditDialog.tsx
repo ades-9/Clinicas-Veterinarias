@@ -6,6 +6,7 @@ import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
+import { useToast } from "@/components/ui/toast"
 import type { Owner } from "@/types"
 
 interface QuickForm {
@@ -34,6 +35,7 @@ interface Props {
 export function OwnerQuickEditDialog({ open, onClose, ownerId, ownerName }: Props) {
   const api = useApiClient()
   const qc = useQueryClient()
+  const { showSuccess } = useToast()
   const [form, setForm] = useState<QuickForm>(EMPTY)
   const [error, setError] = useState("")
 
@@ -62,6 +64,7 @@ export function OwnerQuickEditDialog({ open, onClose, ownerId, ownerName }: Prop
       qc.invalidateQueries({ queryKey: ["owner", ownerId] })
       qc.invalidateQueries({ queryKey: ["owners"] })
       onClose()
+      showSuccess("Propietario actualizado")
     },
     onError: (e: Error) => setError(e.message),
   })

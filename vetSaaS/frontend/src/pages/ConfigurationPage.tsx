@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { useApiClient } from "@/api/client"
 import { usePermissions } from "@/hooks/usePermissions"
 import { Badge } from "@/components/ui/badge"
+import { useToast } from "@/components/ui/toast"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -25,6 +26,7 @@ interface ClinicForm {
 function ClinicSection() {
   const api = useApiClient()
   const queryClient = useQueryClient()
+  const { showSuccess } = useToast()
   const logoInputRef = useRef<HTMLInputElement>(null)
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<ClinicForm>({
@@ -44,6 +46,7 @@ function ClinicSection() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["configuration"] })
+      showSuccess("Logo actualizado")
     },
     onError: (e: Error) => setError(e.message),
   })
@@ -71,6 +74,7 @@ function ClinicSection() {
       queryClient.invalidateQueries({ queryKey: ["configuration"] })
       setEditing(false)
       setError("")
+      showSuccess("Datos de la clínica actualizados")
     },
     onError: (e: Error) => setError(e.message),
   })
@@ -258,6 +262,7 @@ const EMPTY_SERVICE: ServiceForm = {
 function ServicesSection() {
   const api = useApiClient()
   const queryClient = useQueryClient()
+  const { showSuccess } = useToast()
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<AppointmentService | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AppointmentService | null>(null)
@@ -275,6 +280,7 @@ function ServicesSection() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["appointment-services"] })
       closeForm()
+      showSuccess("Servicio creado")
     },
     onError: (e: Error) => setError(e.message),
   })
@@ -285,6 +291,7 @@ function ServicesSection() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["appointment-services"] })
       closeForm()
+      showSuccess("Servicio actualizado")
     },
     onError: (e: Error) => setError(e.message),
   })
@@ -294,6 +301,7 @@ function ServicesSection() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["appointment-services"] })
       setDeleteTarget(null)
+      showSuccess("Servicio eliminado")
     },
     onError: (e: Error) => setError(e.message),
   })
@@ -598,6 +606,7 @@ const EMPTY_NEW_USER: NewUserForm = {
 function UsersSection() {
   const api = useApiClient()
   const qc = useQueryClient()
+  const { showSuccess } = useToast()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editAreas, setEditAreas] = useState<UserArea[]>([])
   const [editRoleId, setEditRoleId] = useState("")
@@ -631,6 +640,7 @@ function UsersSection() {
       qc.invalidateQueries({ queryKey: ["users"] })
       setEditingId(null)
       setError("")
+      showSuccess("Usuario actualizado")
     },
     onError: (e: Error) => setError(e.message),
   })
@@ -1000,6 +1010,7 @@ function groupByModule(actions: string[]): Record<string, string[]> {
 function RolesSection() {
   const api = useApiClient()
   const queryClient = useQueryClient()
+  const { showSuccess } = useToast()
   const [expandedRoleId, setExpandedRoleId] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<Record<string, Set<string>>>({})
   const [error, setError] = useState("")
@@ -1037,6 +1048,7 @@ function RolesSection() {
       setSavedRoleId(data.role_id)
       setError("")
       setTimeout(() => setSavedRoleId(null), 2000)
+      showSuccess(`Permisos del rol ${data.role_name} actualizados`)
     },
     onError: (e: Error) => setError(e.message),
   })

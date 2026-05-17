@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/components/ui/toast"
 import type { Patient } from "@/types"
 
 interface QuickForm {
@@ -41,6 +42,7 @@ interface Props {
 export function PatientQuickEditDialog({ open, onClose, patientId, patientName }: Props) {
   const api = useApiClient()
   const qc = useQueryClient()
+  const { showSuccess } = useToast()
   const [form, setForm] = useState<QuickForm>(EMPTY)
   const [error, setError] = useState("")
 
@@ -72,6 +74,7 @@ export function PatientQuickEditDialog({ open, onClose, patientId, patientName }
       qc.invalidateQueries({ queryKey: ["patient", patientId] })
       qc.invalidateQueries({ queryKey: ["patients"] })
       onClose()
+      showSuccess("Mascota actualizada")
     },
     onError: (e: Error) => setError(e.message),
   })

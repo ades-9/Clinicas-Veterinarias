@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useApiClient } from "@/api/client"
 import { usePermissions } from "@/hooks/usePermissions"
 import { Badge } from "@/components/ui/badge"
+import { useToast } from "@/components/ui/toast"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -51,6 +52,7 @@ export function ProductsPage() {
   const api = useApiClient()
   const qc = useQueryClient()
   const { can } = usePermissions()
+  const { showSuccess } = useToast()
 
   const [search, setSearch] = useState("")
   const [lowStock, setLowStock] = useState(false)
@@ -94,19 +96,31 @@ export function ProductsPage() {
 
   const createProduct = useMutation({
     mutationFn: (d: object) => api.post<Product>("/products", d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); closeForm() },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["products"] })
+      closeForm()
+      showSuccess("Producto creado")
+    },
     onError: (e: Error) => setFormError(e.message),
   })
 
   const updateProduct = useMutation({
     mutationFn: ({ id, d }: { id: string; d: object }) => api.patch<Product>(`/products/${id}`, d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); closeForm() },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["products"] })
+      closeForm()
+      showSuccess("Producto actualizado")
+    },
     onError: (e: Error) => setFormError(e.message),
   })
 
   const deleteProduct = useMutation({
     mutationFn: (id: string) => api.del(`/products/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); setDeleteTarget(null) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["products"] })
+      setDeleteTarget(null)
+      showSuccess("Producto eliminado")
+    },
     onError: (e: Error) => setDeleteError(e.message),
   })
 
@@ -119,6 +133,7 @@ export function ProductsPage() {
       setMovProduct(null)
       setMovForm(EMPTY_MOVEMENT)
       setMovError("")
+      showSuccess("Movimiento de stock registrado")
     },
     onError: (e: Error) => setMovError(e.message),
   })

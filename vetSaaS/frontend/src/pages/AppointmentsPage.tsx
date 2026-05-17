@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import { useApiClient } from "@/api/client"
 import { usePermissions } from "@/hooks/usePermissions"
+import { useToast } from "@/components/ui/toast"
 import { AppointmentCalendar, getWeekStart, addDays } from "@/components/AppointmentCalendar"
 import { AssigneeCombobox } from "@/components/AssigneeCombobox"
 import { ConsultationModal } from "@/components/ConsultationModal"
@@ -93,6 +94,7 @@ export function AppointmentsPage() {
   const api = useApiClient()
   const queryClient = useQueryClient()
   const { can } = usePermissions()
+  const { showSuccess } = useToast()
 
   const [viewMode, setViewMode] = useState<"table" | "calendar">("table")
   const [calWeekStart, setCalWeekStart] = useState(() => getWeekStart(new Date()))
@@ -219,6 +221,7 @@ export function AppointmentsPage() {
       setSelectedAssignee(null)
       setShowNotes(false)
       setError("")
+      showSuccess("Cita creada")
     },
     onError: (e: Error) => setError(e.message),
   })
@@ -226,13 +229,21 @@ export function AppointmentsPage() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: object }) =>
       api.patch<Appointment>(`/appointments/${id}`, data),
-    onSuccess: () => { invalidateAll(); closeForm() },
+    onSuccess: () => {
+      invalidateAll()
+      closeForm()
+      showSuccess("Cita actualizada")
+    },
     onError: (e: Error) => setError(e.message),
   })
 
   const cancelMutation = useMutation({
     mutationFn: (id: string) => api.del(`/appointments/${id}`),
-    onSuccess: () => { invalidateAll(); setCancelTarget(null) },
+    onSuccess: () => {
+      invalidateAll()
+      setCancelTarget(null)
+      showSuccess("Cita cancelada")
+    },
     onError: (e: Error) => setError(e.message),
   })
 

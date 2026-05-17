@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/components/ui/toast"
 import type { Appointment, AppointmentService, Patient, Product } from "@/types"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -139,6 +140,7 @@ interface Props {
 export function ConsultationModal({ appointment, onClose, onFinalized }: Props) {
   const api = useApiClient()
   const qc = useQueryClient()
+  const { showSuccess } = useToast()
   const reasonRequired =
     appointment.service_type === "veterinary"
   const DRAFT_KEY = draftKey(appointment.id)
@@ -471,6 +473,7 @@ export function ConsultationModal({ appointment, onClose, onFinalized }: Props) 
       qc.invalidateQueries({ queryKey: ["sales"] })
       qc.invalidateQueries({ queryKey: ["products"] })
       onFinalized()
+      showSuccess("Consulta finalizada")
     },
     onError: (e: Error) => setError(e.message),
   })

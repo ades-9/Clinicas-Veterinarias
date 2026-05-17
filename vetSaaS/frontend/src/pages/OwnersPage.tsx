@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useApiClient } from "@/api/client"
 import { usePermissions } from "@/hooks/usePermissions"
 import { Button } from "@/components/ui/button"
+import { useToast } from "@/components/ui/toast"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -28,6 +29,7 @@ export function OwnersPage() {
   const api = useApiClient()
   const queryClient = useQueryClient()
   const { can } = usePermissions()
+  const { showSuccess } = useToast()
 
   const [search, setSearch] = useState("")
   const [formOpen, setFormOpen] = useState(false)
@@ -43,20 +45,32 @@ export function OwnersPage() {
 
   const createMutation = useMutation({
     mutationFn: (data: object) => api.post<Owner>("/owners", data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["owners"] }); closeForm() },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["owners"] })
+      closeForm()
+      showSuccess("Propietario creado")
+    },
     onError: (e: Error) => setError(e.message),
   })
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: object }) =>
       api.patch<Owner>(`/owners/${id}`, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["owners"] }); closeForm() },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["owners"] })
+      closeForm()
+      showSuccess("Propietario actualizado")
+    },
     onError: (e: Error) => setError(e.message),
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.del(`/owners/${id}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["owners"] }); setDeleteTarget(null) },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["owners"] })
+      setDeleteTarget(null)
+      showSuccess("Propietario eliminado")
+    },
     onError: (e: Error) => setError(e.message),
   })
 

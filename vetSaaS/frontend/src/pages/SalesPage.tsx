@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useApiClient } from "@/api/client"
 import { usePermissions } from "@/hooks/usePermissions"
 import { Badge } from "@/components/ui/badge"
+import { useToast } from "@/components/ui/toast"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -43,6 +44,7 @@ export function SalesPage() {
   const api = useApiClient()
   const qc = useQueryClient()
   const { can } = usePermissions()
+  const { showSuccess } = useToast()
 
   const [newSaleOpen, setNewSaleOpen] = useState(false)
   const [cart, setCart] = useState<CartItem[]>([])
@@ -117,6 +119,7 @@ export function SalesPage() {
       qc.invalidateQueries({ queryKey: ["products"] })
       qc.invalidateQueries({ queryKey: ["products-active"] })
       closeNewSale()
+      showSuccess("Venta creada")
     },
     onError: (e: Error) => setSaleError(e.message),
   })
@@ -127,6 +130,7 @@ export function SalesPage() {
       qc.invalidateQueries({ queryKey: ["sales"] })
       qc.invalidateQueries({ queryKey: ["products"] })
       setDeleteTarget(null)
+      showSuccess("Venta cancelada")
     },
     onError: (e: Error) => setDeleteError(e.message),
   })
@@ -138,6 +142,7 @@ export function SalesPage() {
       qc.invalidateQueries({ queryKey: ["products"] })
       qc.invalidateQueries({ queryKey: ["products-active"] })
       qc.invalidateQueries({ queryKey: ["products-search"] })
+      showSuccess("Venta cobrada")
     },
   })
 
@@ -617,6 +622,7 @@ interface SaleDetailDialogProps {
 function SaleDetailDialog({ sale, onClose, onUpdated, onFinalized }: SaleDetailDialogProps) {
   const api = useApiClient()
   const qc = useQueryClient()
+  const { showSuccess } = useToast()
   const isPending = sale.status === "pending"
 
   const [editItems, setEditItems] = useState<EditableItem[]>([])
@@ -676,6 +682,7 @@ function SaleDetailDialog({ sale, onClose, onUpdated, onFinalized }: SaleDetailD
       qc.invalidateQueries({ queryKey: ["sales"] })
       qc.invalidateQueries({ queryKey: ["products"] })
       onUpdated(updated)
+      showSuccess("Venta actualizada")
     },
     onError: (e: Error) => setError(e.message),
   })
@@ -704,6 +711,7 @@ function SaleDetailDialog({ sale, onClose, onUpdated, onFinalized }: SaleDetailD
       qc.invalidateQueries({ queryKey: ["products"] })
       qc.invalidateQueries({ queryKey: ["products-active"] })
       onFinalized()
+      showSuccess("Venta cobrada")
     },
     onError: (e: Error) => setError(e.message),
   })

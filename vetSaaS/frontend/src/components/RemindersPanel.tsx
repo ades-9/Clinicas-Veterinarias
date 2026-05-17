@@ -3,6 +3,7 @@ import { AlertCircle, Bug, Calendar, Check, MessageCircle, Phone, Syringe } from
 import { useNavigate } from "react-router-dom"
 import { useApiClient } from "@/api/client"
 import { Button } from "@/components/ui/button"
+import { useToast } from "@/components/ui/toast"
 import type { UpcomingReminder } from "@/types"
 
 function ContactBadge({ r }: { r: UpcomingReminder }) {
@@ -67,6 +68,7 @@ function statusBadge(days: number, lastReminded: string | null) {
 export function RemindersPanel() {
   const api = useApiClient()
   const qc = useQueryClient()
+  const { showSuccess } = useToast()
   const navigate = useNavigate()
 
   const { data: items = [], isLoading } = useQuery({
@@ -76,7 +78,10 @@ export function RemindersPanel() {
 
   const markReminded = useMutation({
     mutationFn: (data: object) => api.post<void>("/reminders/sent", data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["reminders-upcoming"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reminders-upcoming"] })
+      showSuccess("Recordatorio marcado como enviado")
+    },
   })
 
   function handleSchedule(r: UpcomingReminder) {

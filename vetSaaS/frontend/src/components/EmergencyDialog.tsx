@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/components/ui/toast"
 import type {
   Appointment,
   AppointmentService,
@@ -26,6 +27,7 @@ interface Props {
 export function EmergencyDialog({ open, onClose }: Props) {
   const api = useApiClient()
   const qc = useQueryClient()
+  const { showSuccess } = useToast()
 
   const [owner, setOwner] = useState<Owner | null>(null)
   const [patient, setPatient] = useState<Patient | null>(null)
@@ -64,6 +66,7 @@ export function EmergencyDialog({ open, onClose }: Props) {
       qc.invalidateQueries({ queryKey: ["appointments-upcoming"] })
       qc.invalidateQueries({ queryKey: ["appointments-calendar"] })
       onClose()
+      showSuccess("Emergencia registrada")
     },
     onError: (e: Error) => setError(e.message),
   })

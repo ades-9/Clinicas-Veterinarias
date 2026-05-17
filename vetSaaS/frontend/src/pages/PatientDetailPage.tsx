@@ -8,6 +8,7 @@ import { SurgeryDialog } from "@/components/SurgeryDialog"
 import { UpcomingDosesPanel } from "@/components/UpcomingDosesPanel"
 import { VaccinationDialog } from "@/components/VaccinationDialog"
 import { Button } from "@/components/ui/button"
+import { useToast } from "@/components/ui/toast"
 import type { Deworming, Patient, Surgery, Vaccination } from "@/types"
 
 function ExtBadge({ name }: { name: string | null }) {
@@ -26,6 +27,7 @@ export function PatientDetailPage() {
   const navigate = useNavigate()
   const api = useApiClient()
   const qc = useQueryClient()
+  const { showSuccess, showError } = useToast()
   const photoInputRef = useRef<HTMLInputElement>(null)
 
   const [vaccinationOpen, setVaccinationOpen] = useState(false)
@@ -44,8 +46,9 @@ export function PatientDetailPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["patient", patientId] })
       qc.invalidateQueries({ queryKey: ["patients"] })
+      showSuccess("Foto actualizada")
     },
-    onError: (e: Error) => alert(`No se pudo subir la foto: ${e.message}`),
+    onError: (e: Error) => showError(`No se pudo subir la foto: ${e.message}`),
   })
 
   const { data: patient, isLoading } = useQuery({

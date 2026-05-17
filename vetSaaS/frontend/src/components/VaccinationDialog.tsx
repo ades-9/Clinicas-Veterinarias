@@ -7,6 +7,7 @@ import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
+import { useToast } from "@/components/ui/toast"
 import type { Vaccination, VaccineType } from "@/types"
 
 interface VaccinationForm {
@@ -80,6 +81,7 @@ export function VaccinationDialog({
 }: Props) {
   const api = useApiClient()
   const qc = useQueryClient()
+  const { showSuccess } = useToast()
   const [form, setForm] = useState<VaccinationForm>(EMPTY)
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [error, setError] = useState("")
@@ -148,6 +150,7 @@ export function VaccinationDialog({
       qc.invalidateQueries({ queryKey: ["patient-vaccinations", patientId] })
       qc.invalidateQueries({ queryKey: ["medical-records", patientId] })
       onClose()
+      showSuccess("Vacuna registrada")
     },
     onError: (e: Error) => setError(e.message),
   })

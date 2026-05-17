@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom"
 import { useApiClient } from "@/api/client"
 import { usePermissions } from "@/hooks/usePermissions"
 import { Button } from "@/components/ui/button"
+import { useToast } from "@/components/ui/toast"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -47,6 +48,7 @@ export function PatientsPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const { can } = usePermissions()
+  const { showSuccess } = useToast()
 
   const [search, setSearch] = useState("")
   const [formOpen, setFormOpen] = useState(false)
@@ -82,19 +84,31 @@ export function PatientsPage() {
 
   const createMutation = useMutation({
     mutationFn: (d: object) => api.post<Patient>("/patients", d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["patients"] }); closeForm() },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["patients"] })
+      closeForm()
+      showSuccess("Mascota creada")
+    },
     onError: (e: Error) => setError(e.message),
   })
 
   const updateMutation = useMutation({
     mutationFn: ({ id, d }: { id: string; d: object }) => api.patch<Patient>(`/patients/${id}`, d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["patients"] }); closeForm() },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["patients"] })
+      closeForm()
+      showSuccess("Mascota actualizada")
+    },
     onError: (e: Error) => setError(e.message),
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.del(`/patients/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["patients"] }); setDeleteTarget(null) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["patients"] })
+      setDeleteTarget(null)
+      showSuccess("Mascota eliminada")
+    },
     onError: (e: Error) => setError(e.message),
   })
 

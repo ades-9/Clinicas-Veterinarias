@@ -7,6 +7,7 @@ import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/components/ui/toast"
 import type { Appointment, AppointmentService, User } from "@/types"
 
 interface Props {
@@ -26,6 +27,7 @@ export function ScheduleSurgeryDialog({
 }: Props) {
   const api = useApiClient()
   const qc = useQueryClient()
+  const { showSuccess } = useToast()
   const [date, setDate] = useState("")
   const [time, setTime] = useState("")
   const [serviceIds, setServiceIds] = useState<string[]>([])
@@ -65,6 +67,7 @@ export function ScheduleSurgeryDialog({
       qc.invalidateQueries({ queryKey: ["appointments-calendar"] })
       qc.invalidateQueries({ queryKey: ["appointments-upcoming"] })
       onClose()
+      showSuccess("Cirugía programada")
     },
     onError: (e: Error) => setError(e.message),
   })

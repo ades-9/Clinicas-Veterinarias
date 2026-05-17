@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/components/ui/toast"
 import type { Deworming } from "@/types"
 
 interface DewormingForm {
@@ -74,6 +75,7 @@ export function DewormingDialog({
 }: Props) {
   const api = useApiClient()
   const qc = useQueryClient()
+  const { showSuccess } = useToast()
   const [form, setForm] = useState<DewormingForm>(EMPTY)
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [error, setError] = useState("")
@@ -105,6 +107,7 @@ export function DewormingDialog({
       qc.invalidateQueries({ queryKey: ["patient-dewormings", patientId] })
       qc.invalidateQueries({ queryKey: ["medical-records", patientId] })
       onClose()
+      showSuccess("Desparasitación registrada")
     },
     onError: (e: Error) => setError(e.message),
   })
