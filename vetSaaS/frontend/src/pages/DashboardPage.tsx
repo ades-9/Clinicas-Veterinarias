@@ -8,7 +8,7 @@ import { EmergencyDialog } from "@/components/EmergencyDialog"
 import { RemindersPanel } from "@/components/RemindersPanel"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import type { Appointment, AppointmentStatus } from "@/types"
+import type { Appointment, AppointmentsList, AppointmentStatus } from "@/types"
 
 // ── Helpers de fecha ──────────────────────────────────────────────────────────
 // scheduled_at viaja en UTC (TIMESTAMPTZ en el backend); construimos los
@@ -103,23 +103,25 @@ export function DashboardPage() {
   const upcoming = upcomingRange()
   const todayStr = new Date().toLocaleDateString("en-CA")
 
-  const { data: todayAppts = [], isLoading: loadingToday } = useQuery({
+  const { data: todayApptsData, isLoading: loadingToday } = useQuery({
     queryKey: ["appointments-today", todayStr],
     queryFn: () =>
-      api.get<Appointment[]>(
+      api.get<AppointmentsList>(
         `/appointments?date_from=${encodeURIComponent(today.from)}&date_to=${encodeURIComponent(today.to)}&limit=100`
       ),
     staleTime: 0,
   })
+  const todayAppts: Appointment[] = todayApptsData?.items ?? []
 
-  const { data: upcomingAppts = [], isLoading: loadingUpcoming } = useQuery({
+  const { data: upcomingApptsData, isLoading: loadingUpcoming } = useQuery({
     queryKey: ["appointments-upcoming", todayStr],
     queryFn: () =>
-      api.get<Appointment[]>(
+      api.get<AppointmentsList>(
         `/appointments?date_from=${encodeURIComponent(upcoming.from)}&date_to=${encodeURIComponent(upcoming.to)}&limit=100`
       ),
     staleTime: 0,
   })
+  const upcomingAppts: Appointment[] = upcomingApptsData?.items ?? []
 
   const pending = todayAppts.filter((a) => a.status === "pending").length
   const confirmed = todayAppts.filter((a) => a.status === "confirmed").length

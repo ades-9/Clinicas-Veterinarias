@@ -9,18 +9,26 @@ import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Pagination } from "@/components/ui/pagination"
 import type {
   Appointment,
+  AppointmentsList,
   AppointmentService,
   Owner,
+  OwnersList,
   Patient,
+  PatientsList,
   Product,
+  ProductsList,
   Sale,
   SaleItem,
+  SalesList,
   SaleStatus,
   User,
 } from "@/types"
 import { SALE_STATUS_LABELS } from "@/types"
+
+const PAGE_SIZE = 20
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n)
@@ -59,20 +67,33 @@ export function SalesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Sale | null>(null)
   const [deleteError, setDeleteError] = useState("")
   const [statusFilter, setStatusFilter] = useState<SaleStatus | "">("pending")
+  const [page, setPage] = useState(1)
 
   // ── queries ───────────────────────────────────────────────────────────────
 
-  const { data: sales = [], isLoading } = useQuery({
-    queryKey: ["sales", statusFilter],
-    queryFn: () =>
-      api.get<Sale[]>(`/sales?limit=100${statusFilter ? `&status=${statusFilter}` : ""}`),
+  const { data: salesData, isLoading } = useQuery({
+    queryKey: ["sales", statusFilter, page],
+    queryFn: () => {
+      const offset = (page - 1) * PAGE_SIZE
+      return api.get<SalesList>(
+        `/sales?limit=${PAGE_SIZE}&offset=${offset}${statusFilter ? `&status=${statusFilter}` : ""}`
+      )
+    },
   })
+  const sales = salesData?.items ?? []
+  const salesTotal = salesData?.total ?? 0
 
-  const { data: products = [] } = useQuery({
+  function setStatusFilterAndReset(s: SaleStatus | "") {
+    setStatusFilter(s)
+    setPage(1)
+  }
+
+  const { data: productsData } = useQuery({
     queryKey: ["products-active"],
-    queryFn: () => api.get<Product[]>("/products?limit=200"),
+    queryFn: () => api.get<ProductsList>("/products?limit=200"),
     enabled: newSaleOpen,
   })
+  const products = productsData?.items ?? []
 
   const { data: services = [] } = useQuery({
     queryKey: ["appointment-services"],
@@ -80,23 +101,26 @@ export function SalesPage() {
     enabled: newSaleOpen,
   })
 
-  const { data: owners = [] } = useQuery({
+  const { data: ownersData } = useQuery({
     queryKey: ["owners-all"],
-    queryFn: () => api.get<Owner[]>("/owners?limit=200"),
+    queryFn: () => api.get<OwnersList>("/owners?limit=200"),
     enabled: newSaleOpen,
   })
+  const owners = ownersData?.items ?? []
 
-  const { data: allPatients = [] } = useQuery({
+  const { data: allPatientsData } = useQuery({
     queryKey: ["patients-all"],
-    queryFn: () => api.get<Patient[]>("/patients?limit=500"),
+    queryFn: () => api.get<PatientsList>("/patients?limit=500"),
     enabled: newSaleOpen,
   })
+  const allPatients = allPatientsData?.items ?? []
 
-  const { data: appointments = [] } = useQuery({
+  const { data: appointmentsData } = useQuery({
     queryKey: ["appointments-recent"],
-    queryFn: () => api.get<Appointment[]>("/appointments?limit=50&offset=0"),
+    queryFn: () => api.get<AppointmentsList>("/appointments?limit=50&offset=0"),
     enabled: newSaleOpen,
   })
+  const appointments = appointmentsData?.items ?? []
 
   const { data: newSaleUsers = [] } = useQuery({
     queryKey: ["users"],
@@ -264,7 +288,7 @@ export function SalesPage() {
         ] as const).map((opt) => (
           <button
             key={opt.value || "all"}
-            onClick={() => setStatusFilter(opt.value)}
+            onClick={() => setStatusFilterAndReset(opt.value)}
             className={`px-3 py-1.5 text-sm transition-colors ${
               statusFilter === opt.value
                 ? "bg-primary text-primary-foreground"
@@ -354,6 +378,8 @@ export function SalesPage() {
           </tbody>
         </table>
       </div>
+
+      <Pagination page={page} pageSize={PAGE_SIZE} total={salesTotal} onChange={setPage} />
 
       {/* Modal nueva venta */}
       <Dialog open={newSaleOpen} onClose={closeNewSale} title="Nueva venta">
@@ -664,10 +690,10 @@ function SaleDetailDialog({ sale, onClose, onUpdated, onFinalized }: SaleDetailD
     return () => clearTimeout(t)
   }, [productSearch])
 
-  const { data: products = [], isFetching } = useQuery({
+  const { data: productsData, isFetching } = useQuery({
     queryKey: ["sale-edit-products", debouncedSearch],
     queryFn: () =>
-      api.get<Product[]>(
+      api.get<ProductsList>(
         `/products?limit=20&is_active=true&in_stock=true${
           debouncedSearch ? `&q=${encodeURIComponent(debouncedSearch)}` : ""
         }`
@@ -675,6 +701,7 @@ function SaleDetailDialog({ sale, onClose, onUpdated, onFinalized }: SaleDetailD
     enabled: isPending,
     staleTime: 30_000,
   })
+  const products = productsData?.items ?? []
 
   const updateSale = useMutation({
     mutationFn: (data: object) => api.patch<Sale>(`/sales/${sale.id}`, data),

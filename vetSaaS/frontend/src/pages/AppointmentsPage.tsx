@@ -16,10 +16,12 @@ import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Pagination } from "@/components/ui/pagination"
 import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import type {
   Appointment,
+  AppointmentsList,
   AppointmentService,
   AppointmentStatus,
   Owner,
@@ -113,27 +115,40 @@ export function AppointmentsPage() {
   const [justCreated, setJustCreated] = useState<{ patientName: string } | null>(null)
 
   // Table query
-  const { data: appointments = [], isLoading } = useQuery({
-    queryKey: ["appointments", statusFilter],
-    queryFn: () =>
-      api.get<Appointment[]>(
-        `/appointments?limit=100${statusFilter ? `&status=${statusFilter}` : ""}`
-      ),
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 20
+
+  function setStatusFilterAndReset(s: string) {
+    setStatusFilter(s)
+    setPage(1)
+  }
+
+  const { data: appointmentsData, isLoading } = useQuery({
+    queryKey: ["appointments", statusFilter, page],
+    queryFn: () => {
+      const offset = (page - 1) * PAGE_SIZE
+      return api.get<AppointmentsList>(
+        `/appointments?limit=${PAGE_SIZE}&offset=${offset}${statusFilter ? `&status=${statusFilter}` : ""}`
+      )
+    },
     staleTime: 0,
   })
+  const appointments = appointmentsData?.items ?? []
+  const appointmentsTotal = appointmentsData?.total ?? 0
 
   // Calendar query — only active when calendar view is open
   const calWeekEnd = addDays(calWeekStart, 6)
   calWeekEnd.setHours(23, 59, 59, 0)
-  const { data: calAppts = [], isLoading: calLoading } = useQuery({
+  const { data: calApptsData, isLoading: calLoading } = useQuery({
     queryKey: ["appointments-calendar", calWeekStart.toISOString().slice(0, 10)],
     queryFn: () =>
-      api.get<Appointment[]>(
+      api.get<AppointmentsList>(
         `/appointments?date_from=${encodeURIComponent(toUTCISO(calWeekStart))}&date_to=${encodeURIComponent(toUTCISO(calWeekEnd))}&limit=200`
       ),
     enabled: viewMode === "calendar",
     staleTime: 0,
   })
+  const calAppts = calApptsData?.items ?? []
 
   const { data: users = [] } = useQuery({
     queryKey: ["users"],
@@ -155,15 +170,16 @@ export function AppointmentsPage() {
     return ""
   })()
 
-  const { data: dayAppts = [] } = useQuery({
+  const { data: dayApptsData } = useQuery({
     queryKey: ["appointments-day", formDate],
     queryFn: () =>
-      api.get<Appointment[]>(
+      api.get<AppointmentsList>(
         `/appointments?date_from=${encodeURIComponent(new Date(`${formDate}T00:00:00`).toISOString())}&date_to=${encodeURIComponent(new Date(`${formDate}T23:59:59`).toISOString())}&limit=200`
       ),
     enabled: formOpen && !!formDate,
     staleTime: 30_000,
   })
+  const dayAppts = dayApptsData?.items ?? []
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["appointments"] })
@@ -424,7 +440,7 @@ export function AppointmentsPage() {
         <Select
           className="w-48"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => setStatusFilterAndReset(e.target.value)}
         >
           <option value="">Todos los estados</option>
           <option value="pending">Pendiente</option>
@@ -543,6 +559,10 @@ export function AppointmentsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {viewMode === "table" && (
+        <Pagination page={page} pageSize={PAGE_SIZE} total={appointmentsTotal} onChange={setPage} />
       )}
 
       {/* Crear / Editar */}

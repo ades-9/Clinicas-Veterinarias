@@ -524,13 +524,16 @@ function PatientFilter({ onSelect }: PatientFilterProps) {
     return () => document.removeEventListener("mousedown", handleClick)
   }, [])
 
-  const { data: results = [], isFetching } = useQuery({
+  const { data: resultsData, isFetching } = useQuery({
     queryKey: ["patients-search", debouncedQuery],
     queryFn: () =>
-      api.get<Patient[]>(`/patients?q=${encodeURIComponent(debouncedQuery)}&limit=20`),
+      api.get<{ items: Patient[]; total: number }>(
+        `/patients?q=${encodeURIComponent(debouncedQuery)}&limit=20`
+      ),
     enabled: debouncedQuery.length > 0,
     staleTime: 30_000,
   })
+  const results = resultsData?.items ?? []
 
   return (
     <div ref={containerRef} className="relative w-72">

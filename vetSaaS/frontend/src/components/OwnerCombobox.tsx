@@ -48,13 +48,16 @@ export function OwnerCombobox({ value, onChange }: Props) {
     return () => document.removeEventListener("mousedown", handleClick)
   }, [])
 
-  const { data: results = [], isFetching } = useQuery({
+  const { data: resultsData, isFetching } = useQuery({
     queryKey: ["owners-search", debouncedQuery],
     queryFn: () =>
-      api.get<Owner[]>(`/owners?q=${encodeURIComponent(debouncedQuery)}&limit=20`),
+      api.get<{ items: Owner[]; total: number }>(
+        `/owners?q=${encodeURIComponent(debouncedQuery)}&limit=20`
+      ),
     enabled: debouncedQuery.length > 0 && !createMode,
     staleTime: 30_000,
   })
+  const results = resultsData?.items ?? []
 
   const createMutation = useMutation({
     mutationFn: (data: object) => api.post<Owner>("/owners", data),

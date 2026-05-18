@@ -58,15 +58,16 @@ export function PatientCombobox({ ownerId, value, onChange }: Props) {
     setError("")
   }, [ownerId])
 
-  const { data: results = [], isFetching } = useQuery({
+  const { data: resultsData, isFetching } = useQuery({
     queryKey: ["patients-by-owner", ownerId, debouncedQuery],
     queryFn: () =>
-      api.get<Patient[]>(
+      api.get<{ items: Patient[]; total: number }>(
         `/patients?owner_id=${ownerId}${debouncedQuery ? `&q=${encodeURIComponent(debouncedQuery)}` : ""}&limit=20`
       ),
     enabled: !!ownerId && !createMode && (dropdownOpen || debouncedQuery.length > 0),
     staleTime: 30_000,
   })
+  const results = resultsData?.items ?? []
 
   const { data: speciesList = [] } = useQuery({
     queryKey: ["catalog-species"],

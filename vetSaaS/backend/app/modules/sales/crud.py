@@ -10,6 +10,7 @@ from app.modules.sales.schemas import (
     SaleItemCreate,
     SaleItemRead,
     SaleRead,
+    SalesList,
     SaleUpdate,
 )
 
@@ -115,30 +116,37 @@ async def list_sales(
     sale_status: str | None = None,
     limit: int = 50,
     offset: int = 0,
-) -> list[SaleRead]:
+) -> SalesList:
     await set_rls_context(session, clinic_id)
     filters = ""
     params: dict = {"limit": limit, "offset": offset}
+    count_params: dict = {}
     if patient_id:
         filters += " AND s.patient_id = :patient_id"
         params["patient_id"] = patient_id
+        count_params["patient_id"] = patient_id
     if owner_id:
         filters += " AND s.owner_id = :owner_id"
         params["owner_id"] = owner_id
+        count_params["owner_id"] = owner_id
     if sale_status:
         filters += " AND s.status = :sale_status"
         params["sale_status"] = sale_status
+        count_params["sale_status"] = sale_status
 
-    result = await session.execute(
+    items_result = await session.execute(
         text(f"{_SALE_SELECT}{filters} ORDER BY s.created_at DESC LIMIT :limit OFFSET :offset"),
         params,
     )
-    rows = list(result.mappings())
+    rows = list(items_result.mappings())
     sales = []
     for row in rows:
         items = await _load_items(str(row["id"]), session)
         sales.append(SaleRead(**row, items=items))
-    return sales
+
+    count_sql = "SELECT COUNT(*) FROM sales s WHERE s.deleted_at IS NULL" + filters
+    total = (await session.execute(text(count_sql), count_params)).scalar() or 0
+    return SalesList(items=sales, total=total)
 
 
 async def get_sale(sale_id: str, clinic_id: str, session: AsyncSession) -> SaleRead:

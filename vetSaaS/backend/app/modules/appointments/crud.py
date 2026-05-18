@@ -10,6 +10,7 @@ from app.modules.appointments.schemas import (
     AppointmentServiceCreate,
     AppointmentServiceRead,
     AppointmentServiceUpdate,
+    AppointmentsList,
     AppointmentUpdate,
 )
 
@@ -273,33 +274,40 @@ async def list_appointments(
     only_own_clerk_id: str | None = None,
     limit: int = 50,
     offset: int = 0,
-) -> list[AppointmentRead]:
+) -> AppointmentsList:
     await set_rls_context(session, clinic_id)
     await _auto_cancel_stale(session)
 
     filters = ""
     params: dict = {"limit": limit, "offset": offset}
+    count_params: dict = {}
 
     if appointment_status:
         filters += " AND a.status = :appointment_status"
         params["appointment_status"] = appointment_status
+        count_params["appointment_status"] = appointment_status
     if service_type:
         filters += " AND a.service_type = :service_type"
         params["service_type"] = service_type
+        count_params["service_type"] = service_type
     if patient_id:
         filters += " AND a.patient_id = :patient_id"
         params["patient_id"] = patient_id
+        count_params["patient_id"] = patient_id
     if assigned_user_id:
         filters += " AND a.assigned_user_id = :assigned_user_id"
         params["assigned_user_id"] = assigned_user_id
+        count_params["assigned_user_id"] = assigned_user_id
     if date_from:
         try:
             dt = datetime.fromisoformat(date_from)
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
             params["date_from"] = dt
+            count_params["date_from"] = dt
         except ValueError:
             params["date_from"] = date_from
+            count_params["date_from"] = date_from
         filters += " AND a.scheduled_at >= :date_from"
     if date_to:
         try:
@@ -307,8 +315,10 @@ async def list_appointments(
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
             params["date_to"] = dt
+            count_params["date_to"] = dt
         except ValueError:
             params["date_to"] = date_to
+            count_params["date_to"] = date_to
         filters += " AND a.scheduled_at <= :date_to"
     if only_own_clerk_id:
         filters += (
@@ -316,16 +326,21 @@ async def list_appointments(
             "SELECT id FROM users WHERE clerk_user_id = :only_own_clerk_id AND deleted_at IS NULL LIMIT 1)"
         )
         params["only_own_clerk_id"] = only_own_clerk_id
+        count_params["only_own_clerk_id"] = only_own_clerk_id
 
-    result = await session.execute(
+    items_result = await session.execute(
         text(f"{_APPOINTMENT_SELECT}{filters} ORDER BY a.scheduled_at LIMIT :limit OFFSET :offset"),
         params,
     )
-    rows = [dict(r) for r in result.mappings()]
+    rows = [dict(r) for r in items_result.mappings()]
     services_by_appt = await _bulk_load_services_by_appointment(
         [str(r["id"]) for r in rows], session
     )
-    return [_build_appointment_read(r, services_by_appt.get(str(r["id"]), [])) for r in rows]
+    items = [_build_appointment_read(r, services_by_appt.get(str(r["id"]), [])) for r in rows]
+
+    count_sql = "SELECT COUNT(*) FROM appointments a WHERE a.deleted_at IS NULL" + filters
+    total = (await session.execute(text(count_sql), count_params)).scalar() or 0
+    return AppointmentsList(items=items, total=total)
 
 
 async def get_appointment(

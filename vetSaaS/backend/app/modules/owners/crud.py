@@ -3,7 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import set_rls_context
-from app.modules.owners.schemas import OwnerCreate, OwnerRead, OwnerUpdate
+from app.modules.owners.schemas import OwnerCreate, OwnerRead, OwnersList, OwnerUpdate
 
 _OWNER_SELECT = """
     SELECT id, clinic_id, full_name, id_number, phone, email, address,
@@ -19,24 +19,51 @@ async def list_owners(
     q: str | None = None,
     limit: int = 50,
     offset: int = 0,
-) -> list[OwnerRead]:
+) -> OwnersList:
     await set_rls_context(session, clinic_id)
 
+    if q:
+        params = {"q": f"%{q}%", "limit": limit, "offset": offset}
+        items_sql = f"""
+            {_OWNER_SELECT}
+              AND (full_name ILIKE :q OR email ILIKE :q OR phone ILIKE :q OR id_number ILIKE :q)
+            ORDER BY full_name
+            LIMIT :limit OFFSET :offset
+        """
+        count_sql = """
+            SELECT COUNT(*) FROM owners
+            WHERE deleted_at IS NULL
+              AND (full_name ILIKE :q OR email ILIKE :q OR phone ILIKE :q OR id_number ILIKE :q)
+        """
+    else:
+        params = {"limit": limit, "offset": offset}
+        items_sql = f"{_OWNER_SELECT} ORDER BY full_name LIMIT :limit OFFSET :offset"
+        count_sql = "SELECT COUNT(*) FROM owners WHERE deleted_at IS NULL"
+
+    items_result = await session.execute(text(items_sql), params)
+    items = [OwnerRead(**row) for row in items_result.mappings()]
+
+    count_params = {"q": params["q"]} if q else {}
+    total = (await session.execute(text(count_sql), count_params)).scalar() or 0
+    return OwnersList(items=items, total=total)
+
+
+async def list_all_owners_for_export(
+    clinic_id: str, session: AsyncSession, q: str | None = None
+) -> list[OwnerRead]:
+    """Para exportación: trae todos los propietarios sin paginar."""
+    await set_rls_context(session, clinic_id)
     if q:
         result = await session.execute(
             text(f"""
                 {_OWNER_SELECT}
                   AND (full_name ILIKE :q OR email ILIKE :q OR phone ILIKE :q OR id_number ILIKE :q)
                 ORDER BY full_name
-                LIMIT :limit OFFSET :offset
             """),
-            {"q": f"%{q}%", "limit": limit, "offset": offset},
+            {"q": f"%{q}%"},
         )
     else:
-        result = await session.execute(
-            text(f"{_OWNER_SELECT} ORDER BY full_name LIMIT :limit OFFSET :offset"),
-            {"limit": limit, "offset": offset},
-        )
+        result = await session.execute(text(f"{_OWNER_SELECT} ORDER BY full_name"))
     return [OwnerRead(**row) for row in result.mappings()]
 
 
@@ -91,6 +118,19 @@ async def update_owner(owner_id: str, clinic_id: str, data: OwnerUpdate, session
 
 async def delete_owner(owner_id: str, clinic_id: str, session: AsyncSession) -> None:
     await set_rls_context(session, clinic_id)
+
+    # Bloquear si el propietario tiene mascotas activas
+    pets_count = await session.execute(
+        text("SELECT COUNT(*) FROM patients WHERE owner_id = :id AND deleted_at IS NULL"),
+        {"id": owner_id},
+    )
+    n = pets_count.scalar() or 0
+    if n > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"No se puede eliminar: el propietario tiene {n} mascota(s) registrada(s)",
+        )
+
     result = await session.execute(
         text("UPDATE owners SET deleted_at = NOW() WHERE id = :id AND deleted_at IS NULL RETURNING id"),
         {"id": owner_id},

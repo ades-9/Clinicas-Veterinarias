@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Pencil, Plus, Search, Trash2 } from "lucide-react"
-import { useState } from "react"
+import { FileSpreadsheet, FileText, Pencil, Plus, Search, Trash2 } from "lucide-react"
+import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useApiClient } from "@/api/client"
 import { usePermissions } from "@/hooks/usePermissions"
@@ -9,9 +9,11 @@ import { useToast } from "@/components/ui/toast"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Pagination } from "@/components/ui/pagination"
 import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import type { Breed, Owner, Patient, Species } from "@/types"
+import { sanitizeWeightInput, todayISO, validateBirthDate, validateWeight } from "@/lib/validators"
+import type { Breed, OwnersList, Patient, PatientsList, Species } from "@/types"
 
 interface PatientForm {
   owner_id: string
@@ -43,30 +45,47 @@ const EMPTY: PatientForm = {
   vaccination_code: "", notes: "",
 }
 
+const PAGE_SIZE = 20
+
 export function PatientsPage() {
   const api = useApiClient()
   const qc = useQueryClient()
   const navigate = useNavigate()
   const { can } = usePermissions()
-  const { showSuccess } = useToast()
+  const { showSuccess, showError } = useToast()
 
   const [search, setSearch] = useState("")
+  const [page, setPage] = useState(1)
   const [formOpen, setFormOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Patient | null>(null)
   const [editing, setEditing] = useState<Patient | null>(null)
   const [form, setForm] = useState<PatientForm>(EMPTY)
   const [error, setError] = useState("")
+  const [exporting, setExporting] = useState(false)
 
-  const { data: patients = [], isLoading } = useQuery({
-    queryKey: ["patients", search],
-    queryFn: () => api.get<Patient[]>(`/patients?q=${encodeURIComponent(search)}&limit=100`),
+  const { data, isLoading } = useQuery({
+    queryKey: ["patients", search, page],
+    queryFn: () => {
+      const offset = (page - 1) * PAGE_SIZE
+      return api.get<PatientsList>(
+        `/patients?q=${encodeURIComponent(search)}&limit=${PAGE_SIZE}&offset=${offset}`
+      )
+    },
   })
+  const patients = data?.items ?? []
+  const total = data?.total ?? 0
 
-  const { data: owners = [] } = useQuery({
-    queryKey: ["owners"],
-    queryFn: () => api.get<Owner[]>("/owners?limit=200"),
+  function handleSearch(value: string) {
+    setSearch(value)
+    setPage(1)
+  }
+
+  const { data: ownersData } = useQuery({
+    queryKey: ["owners-all-for-select"],
+    queryFn: () => api.get<OwnersList>("/owners?limit=200"),
     enabled: formOpen,
   })
+  const owners = ownersData?.items ?? []
 
   const { data: speciesList = [] } = useQuery({
     queryKey: ["catalog-species"],
@@ -168,10 +187,28 @@ export function PatientsPage() {
     }
   }
 
+  const birthDateError = useMemo(() => validateBirthDate(form.birth_date), [form.birth_date])
+  const weightError = useMemo(() => validateWeight(form.weight), [form.weight])
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setError("")
+    if (birthDateError) { setError(birthDateError); return }
+    if (weightError) { setError(weightError); return }
     if (editing) updateMutation.mutate({ id: editing.id, d: buildPayload() })
     else createMutation.mutate(buildPayload())
+  }
+
+  async function handleExport(format: "xlsx" | "pdf") {
+    setExporting(true)
+    try {
+      const qs = search ? `?q=${encodeURIComponent(search)}` : ""
+      await api.download(`/patients/export.${format}${qs}`, `mascotas.${format}`)
+      showSuccess(`Exportado a ${format.toUpperCase()}`)
+    } catch (e) {
+      showError(e instanceof Error ? e.message : "Error al exportar")
+    } finally {
+      setExporting(false)
+    }
   }
 
   function handleSpeciesChange(speciesId: string) {
@@ -187,12 +224,34 @@ export function PatientsPage() {
           <h1 className="text-2xl font-bold">Mascotas</h1>
           <p className="text-sm text-muted-foreground">Gestión de mascotas (mascotas)</p>
         </div>
-        {can("patients.create") && (
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4" />
-            Nuevo mascota
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleExport("xlsx")}
+            disabled={exporting || total === 0}
+            title="Exportar a Excel"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Excel
           </Button>
-        )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleExport("pdf")}
+            disabled={exporting || total === 0}
+            title="Exportar a PDF"
+          >
+            <FileText className="h-4 w-4" />
+            PDF
+          </Button>
+          {can("patients.create") && (
+            <Button onClick={openCreate}>
+              <Plus className="h-4 w-4" />
+              Nueva mascota
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="relative">
@@ -201,7 +260,7 @@ export function PatientsPage() {
           className="pl-9"
           placeholder="Buscar por nombre, propietario o código de vacuna..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => handleSearch(e.target.value)}
         />
       </div>
 
@@ -289,6 +348,8 @@ export function PatientsPage() {
         </table>
       </div>
 
+      <Pagination page={page} pageSize={PAGE_SIZE} total={total} onChange={setPage} />
+
       {/* Crear / Editar */}
       <Dialog open={formOpen} onClose={closeForm} title={editing ? "Editar mascota" : "Nuevo mascota"} className="max-w-2xl">
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -357,11 +418,29 @@ export function PatientsPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="birth_date">Fecha de nacimiento</Label>
-                <Input id="birth_date" type="date" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} />
+                <Input
+                  id="birth_date"
+                  type="date"
+                  max={todayISO()}
+                  value={form.birth_date}
+                  onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
+                />
+                {form.birth_date && birthDateError && (
+                  <p className="text-xs text-destructive">{birthDateError}</p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="weight">Peso (kg)</Label>
-                <Input id="weight" type="number" step="0.01" min="0" value={form.weight} onChange={(e) => setForm({ ...form, weight: e.target.value })} />
+                <Input
+                  id="weight"
+                  inputMode="decimal"
+                  placeholder="Ej. 12.5"
+                  value={form.weight}
+                  onChange={(e) => setForm({ ...form, weight: sanitizeWeightInput(e.target.value) })}
+                />
+                {form.weight && weightError && (
+                  <p className="text-xs text-destructive">{weightError}</p>
+                )}
               </div>
             </div>
             <div className="space-y-1.5">
@@ -432,7 +511,7 @@ export function PatientsPage() {
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
-            <Button type="submit" disabled={isSaving}>
+            <Button type="submit" disabled={isSaving || !!birthDateError || !!weightError}>
               {isSaving ? "Guardando..." : editing ? "Guardar cambios" : "Crear mascota"}
             </Button>
           </div>

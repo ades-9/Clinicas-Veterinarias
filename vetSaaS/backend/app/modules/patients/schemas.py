@@ -3,9 +3,25 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 PatientSex = Literal["male", "female"]
+
+
+def _validate_birth_date(v: date | None) -> date | None:
+    if v is not None and v > date.today():
+        raise ValueError("La fecha de nacimiento no puede ser futura")
+    return v
+
+
+def _validate_weight(v: Decimal | None) -> Decimal | None:
+    if v is None:
+        return None
+    if v <= 0:
+        raise ValueError("El peso debe ser mayor a 0")
+    if v > 500:
+        raise ValueError("El peso parece inválido (mayor a 500 kg)")
+    return v
 
 
 class PatientRead(BaseModel):
@@ -36,6 +52,11 @@ class PatientRead(BaseModel):
     created_at: datetime
 
 
+class PatientsList(BaseModel):
+    items: list[PatientRead]
+    total: int
+
+
 class PatientCreate(BaseModel):
     owner_id: str
     name: str
@@ -55,6 +76,9 @@ class PatientCreate(BaseModel):
     grooming_preferences: str | None = None
     vaccination_code: str | None = None
     notes: str | None = None
+
+    _check_birth = field_validator("birth_date")(_validate_birth_date)
+    _check_weight = field_validator("weight")(_validate_weight)
 
 
 class PatientUpdate(BaseModel):
@@ -76,3 +100,6 @@ class PatientUpdate(BaseModel):
     grooming_preferences: str | None = None
     vaccination_code: str | None = None
     notes: str | None = None
+
+    _check_birth = field_validator("birth_date")(_validate_birth_date)
+    _check_weight = field_validator("weight")(_validate_weight)

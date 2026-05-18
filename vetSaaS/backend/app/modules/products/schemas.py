@@ -66,6 +66,11 @@ class ProductUpdate(BaseModel):
     is_medication: bool | None = None
 
 
+class ProductsList(BaseModel):
+    items: list[ProductRead]
+    total: int
+
+
 class StockMovementRead(BaseModel):
     id: UUID
     clinic_id: UUID
@@ -76,6 +81,11 @@ class StockMovementRead(BaseModel):
     quantity: Decimal
     reason: str | None
     created_at: datetime
+
+
+class StockMovementsList(BaseModel):
+    items: list[StockMovementRead]
+    total: int
 
 
 class StockMovementCreate(BaseModel):

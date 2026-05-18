@@ -64,6 +64,11 @@ class AppointmentRead(BaseModel):
     created_at: datetime
 
 
+class AppointmentsList(BaseModel):
+    items: list[AppointmentRead]
+    total: int
+
+
 class AppointmentCreate(BaseModel):
     patient_id: str
     owner_id: str

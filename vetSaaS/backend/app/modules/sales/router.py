@@ -6,12 +6,12 @@ from app.core.auth import CurrentUser
 from app.core.database import get_db
 from app.core.permissions import require_permission
 from app.modules.sales import crud
-from app.modules.sales.schemas import SaleCreate, SaleRead, SaleUpdate
+from app.modules.sales.schemas import SaleCreate, SaleRead, SalesList, SaleUpdate
 
 router = APIRouter(prefix="/sales", tags=["sales"])
 
 
-@router.get("", response_model=list[SaleRead])
+@router.get("", response_model=SalesList)
 async def list_sales(
     patient_id: str | None = Query(default=None),
     owner_id: str | None = Query(default=None),

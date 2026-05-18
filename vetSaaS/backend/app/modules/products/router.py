@@ -12,9 +12,11 @@ from app.modules.products.schemas import (
     ProductCategoryUpdate,
     ProductCreate,
     ProductRead,
+    ProductsList,
     ProductUpdate,
     StockMovementCreate,
     StockMovementRead,
+    StockMovementsList,
 )
 
 categories_router = APIRouter(prefix="/product-categories", tags=["inventory"])
@@ -62,7 +64,7 @@ async def delete_category(
 
 # ---- products ----
 
-@router.get("", response_model=list[ProductRead])
+@router.get("", response_model=ProductsList)
 async def list_products(
     q: str | None = Query(default=None),
     category_id: str | None = Query(default=None),
@@ -122,7 +124,7 @@ async def delete_product(
 
 # ---- stock movements ----
 
-@movements_router.get("", response_model=list[StockMovementRead])
+@movements_router.get("", response_model=StockMovementsList)
 async def list_stock_movements(
     product_id: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),

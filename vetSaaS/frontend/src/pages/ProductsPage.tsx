@@ -9,8 +9,11 @@ import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Pagination } from "@/components/ui/pagination"
 import { Select } from "@/components/ui/select"
-import type { Product, ProductCategory, ProductUnit, StockMovement } from "@/types"
+import type { Product, ProductCategory, ProductsList, ProductUnit, StockMovement, StockMovementsList } from "@/types"
+
+const PAGE_SIZE = 20
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -57,6 +60,8 @@ export function ProductsPage() {
   const [search, setSearch] = useState("")
   const [lowStock, setLowStock] = useState(false)
   const [tab, setTab] = useState<"products" | "movements">("products")
+  const [productsPage, setProductsPage] = useState(1)
+  const [movementsPage, setMovementsPage] = useState(1)
 
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Product | null>(null)
@@ -82,17 +87,31 @@ export function ProductsPage() {
     staleTime: Infinity,
   })
 
-  const { data: products = [], isLoading } = useQuery({
-    queryKey: ["products", search, lowStock],
-    queryFn: () =>
-      api.get<Product[]>(`/products?q=${encodeURIComponent(search)}&low_stock=${lowStock}&limit=200`),
+  const { data: productsData, isLoading } = useQuery({
+    queryKey: ["products", search, lowStock, productsPage],
+    queryFn: () => {
+      const offset = (productsPage - 1) * PAGE_SIZE
+      return api.get<ProductsList>(
+        `/products?q=${encodeURIComponent(search)}&low_stock=${lowStock}&limit=${PAGE_SIZE}&offset=${offset}`
+      )
+    },
   })
+  const products = productsData?.items ?? []
+  const productsTotal = productsData?.total ?? 0
 
-  const { data: movements = [], isLoading: loadingMov } = useQuery({
-    queryKey: ["stock-movements"],
-    queryFn: () => api.get<StockMovement[]>("/stock-movements?limit=100"),
+  const { data: movementsData, isLoading: loadingMov } = useQuery({
+    queryKey: ["stock-movements", movementsPage],
+    queryFn: () => {
+      const offset = (movementsPage - 1) * PAGE_SIZE
+      return api.get<StockMovementsList>(`/stock-movements?limit=${PAGE_SIZE}&offset=${offset}`)
+    },
     enabled: tab === "movements",
   })
+  const movements = movementsData?.items ?? []
+  const movementsTotal = movementsData?.total ?? 0
+
+  function handleSearch(v: string) { setSearch(v); setProductsPage(1) }
+  function handleLowStockToggle(v: boolean) { setLowStock(v); setProductsPage(1) }
 
   const createProduct = useMutation({
     mutationFn: (d: object) => api.post<Product>("/products", d),
@@ -233,11 +252,11 @@ export function ProductsPage() {
                 className="pl-9"
                 placeholder="Buscar por nombre o SKU..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => handleSearch(e.target.value)}
               />
             </div>
             <button
-              onClick={() => setLowStock((v) => !v)}
+              onClick={() => handleLowStockToggle(!lowStock)}
               className={`flex items-center gap-2 px-3 py-2 rounded-md border text-sm transition-colors ${
                 lowStock ? "bg-destructive/10 border-destructive/30 text-destructive" : "text-muted-foreground hover:bg-accent"
               }`}
@@ -328,6 +347,7 @@ export function ProductsPage() {
               </tbody>
             </table>
           </div>
+          <Pagination page={productsPage} pageSize={PAGE_SIZE} total={productsTotal} onChange={setProductsPage} />
         </>
       )}
 
@@ -374,6 +394,9 @@ export function ProductsPage() {
               )}
             </tbody>
           </table>
+          <div className="border-t px-4 py-3">
+            <Pagination page={movementsPage} pageSize={PAGE_SIZE} total={movementsTotal} onChange={setMovementsPage} />
+          </div>
         </div>
       )}
 

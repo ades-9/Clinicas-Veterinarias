@@ -64,6 +64,36 @@ export interface Owner {
   created_at: string
 }
 
+export interface OwnersList {
+  items: Owner[]
+  total: number
+}
+
+export interface PatientsList {
+  items: Patient[]
+  total: number
+}
+
+export interface AppointmentsList {
+  items: Appointment[]
+  total: number
+}
+
+export interface ProductsList {
+  items: Product[]
+  total: number
+}
+
+export interface StockMovementsList {
+  items: StockMovement[]
+  total: number
+}
+
+export interface SalesList {
+  items: Sale[]
+  total: number
+}
+
 export type PatientSex = "male" | "female"
 
 export interface Patient {

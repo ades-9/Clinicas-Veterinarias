@@ -39,13 +39,16 @@ export function PatientSearch({ value, onChange }: PatientSearchProps) {
     return () => document.removeEventListener("mousedown", handleClick)
   }, [])
 
-  const { data: results = [], isFetching } = useQuery({
+  const { data: resultsData, isFetching } = useQuery({
     queryKey: ["patients-search", debouncedQuery],
     queryFn: () =>
-      api.get<Patient[]>(`/patients?q=${encodeURIComponent(debouncedQuery)}&limit=20`),
+      api.get<{ items: Patient[]; total: number }>(
+        `/patients?q=${encodeURIComponent(debouncedQuery)}&limit=20`
+      ),
     enabled: debouncedQuery.length > 0,
     staleTime: 30_000,
   })
+  const results = resultsData?.items ?? []
 
   function handleSelect(patient: Patient) {
     onChange(patient)
@@ -161,11 +164,12 @@ function NewPatientDialog({ open, onClose, onCreated }: NewPatientDialogProps) {
   const [error, setError] = useState("")
   const [newOwnerOpen, setNewOwnerOpen] = useState(false)
 
-  const { data: owners = [] } = useQuery({
-    queryKey: ["owners"],
-    queryFn: () => api.get<Owner[]>("/owners?limit=200"),
+  const { data: ownersData } = useQuery({
+    queryKey: ["owners-all-for-select"],
+    queryFn: () => api.get<{ items: Owner[]; total: number }>("/owners?limit=200"),
     enabled: open,
   })
+  const owners = ownersData?.items ?? []
 
   const mutation = useMutation({
     mutationFn: (data: object) => api.post<Patient>("/patients", data),

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Pencil, Plus, Search, Trash2 } from "lucide-react"
-import { useState } from "react"
+import { FileSpreadsheet, FileText, Pencil, Plus, Search, Trash2 } from "lucide-react"
+import { useMemo, useState } from "react"
 import { useApiClient } from "@/api/client"
 import { usePermissions } from "@/hooks/usePermissions"
 import { Button } from "@/components/ui/button"
@@ -8,8 +8,10 @@ import { useToast } from "@/components/ui/toast"
 import { Dialog } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Pagination } from "@/components/ui/pagination"
 import { Select } from "@/components/ui/select"
-import type { Owner } from "@/types"
+import { sanitizeDigits, validateEcuadorId, validatePhone10 } from "@/lib/validators"
+import type { Owner, OwnersList } from "@/types"
 
 interface OwnerForm {
   full_name: string
@@ -17,7 +19,7 @@ interface OwnerForm {
   phone: string
   email: string
   address: string
-  preferred_contact: string  // "", "whatsapp", "sms", "email", "phone"
+  preferred_contact: string
 }
 
 const EMPTY: OwnerForm = {
@@ -25,26 +27,42 @@ const EMPTY: OwnerForm = {
   preferred_contact: "",
 }
 
+const PAGE_SIZE = 20
+
 export function OwnersPage() {
   const api = useApiClient()
   const queryClient = useQueryClient()
   const { can } = usePermissions()
-  const { showSuccess } = useToast()
+  const { showSuccess, showError } = useToast()
 
   const [search, setSearch] = useState("")
+  const [page, setPage] = useState(1)
   const [formOpen, setFormOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Owner | null>(null)
   const [editing, setEditing] = useState<Owner | null>(null)
   const [form, setForm] = useState<OwnerForm>(EMPTY)
   const [error, setError] = useState("")
+  const [exporting, setExporting] = useState(false)
 
-  const { data: owners = [], isLoading } = useQuery({
-    queryKey: ["owners", search],
-    queryFn: () => api.get<Owner[]>(`/owners?q=${encodeURIComponent(search)}&limit=100`),
+  const { data, isLoading } = useQuery({
+    queryKey: ["owners", search, page],
+    queryFn: () => {
+      const offset = (page - 1) * PAGE_SIZE
+      return api.get<OwnersList>(
+        `/owners?q=${encodeURIComponent(search)}&limit=${PAGE_SIZE}&offset=${offset}`
+      )
+    },
   })
+  const owners = data?.items ?? []
+  const total = data?.total ?? 0
+
+  function handleSearch(value: string) {
+    setSearch(value)
+    setPage(1)
+  }
 
   const createMutation = useMutation({
-    mutationFn: (data: object) => api.post<Owner>("/owners", data),
+    mutationFn: (payload: object) => api.post<Owner>("/owners", payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["owners"] })
       closeForm()
@@ -54,8 +72,8 @@ export function OwnersPage() {
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: object }) =>
-      api.patch<Owner>(`/owners/${id}`, data),
+    mutationFn: ({ id, payload }: { id: string; payload: object }) =>
+      api.patch<Owner>(`/owners/${id}`, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["owners"] })
       closeForm()
@@ -102,9 +120,19 @@ export function OwnersPage() {
     setError("")
   }
 
+  // Validaciones inline para los inputs
+  const idError = useMemo(
+    () => (form.id_number ? validateEcuadorId(form.id_number) : null),
+    [form.id_number]
+  )
+  const phoneError = useMemo(() => validatePhone10(form.phone), [form.phone])
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
+    if (idError) { setError(idError); return }
+    if (phoneError) { setError(phoneError); return }
+
     const payload = {
       full_name: form.full_name,
       id_number: form.id_number || null,
@@ -114,9 +142,22 @@ export function OwnersPage() {
       preferred_contact: form.preferred_contact || null,
     }
     if (editing) {
-      updateMutation.mutate({ id: editing.id, data: payload })
+      updateMutation.mutate({ id: editing.id, payload })
     } else {
       createMutation.mutate(payload)
+    }
+  }
+
+  async function handleExport(format: "xlsx" | "pdf") {
+    setExporting(true)
+    try {
+      const qs = search ? `?q=${encodeURIComponent(search)}` : ""
+      await api.download(`/owners/export.${format}${qs}`, `propietarios.${format}`)
+      showSuccess(`Exportado a ${format.toUpperCase()}`)
+    } catch (e) {
+      showError(e instanceof Error ? e.message : "Error al exportar")
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -129,12 +170,34 @@ export function OwnersPage() {
           <h1 className="text-2xl font-bold">Propietarios</h1>
           <p className="text-sm text-muted-foreground">Gestión de propietarios de mascotas</p>
         </div>
-        {can("owners.create") && (
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4" />
-            Nuevo propietario
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleExport("xlsx")}
+            disabled={exporting || total === 0}
+            title="Exportar a Excel"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Excel
           </Button>
-        )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleExport("pdf")}
+            disabled={exporting || total === 0}
+            title="Exportar a PDF"
+          >
+            <FileText className="h-4 w-4" />
+            PDF
+          </Button>
+          {can("owners.create") && (
+            <Button onClick={openCreate}>
+              <Plus className="h-4 w-4" />
+              Nuevo propietario
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="relative">
@@ -143,7 +206,7 @@ export function OwnersPage() {
           className="pl-9"
           placeholder="Buscar por nombre, email, teléfono o documento..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => handleSearch(e.target.value)}
         />
       </div>
 
@@ -208,6 +271,8 @@ export function OwnersPage() {
         </table>
       </div>
 
+      <Pagination page={page} pageSize={PAGE_SIZE} total={total} onChange={setPage} />
+
       {/* Crear / Editar */}
       <Dialog
         open={formOpen}
@@ -225,21 +290,33 @@ export function OwnersPage() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="id_number">Documento de identidad</Label>
+            <Label htmlFor="id_number">Cédula (10 dígitos)</Label>
             <Input
               id="id_number"
+              inputMode="numeric"
+              maxLength={10}
               value={form.id_number}
-              onChange={(e) => setForm({ ...form, id_number: e.target.value })}
+              onChange={(e) => setForm({ ...form, id_number: sanitizeDigits(e.target.value, 10) })}
+              placeholder="1712345678"
             />
+            {form.id_number && idError && (
+              <p className="text-xs text-destructive">{idError}</p>
+            )}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="phone">Teléfono</Label>
+            <Label htmlFor="phone">Teléfono (10 dígitos)</Label>
             <Input
               id="phone"
               type="tel"
+              inputMode="numeric"
+              maxLength={10}
               value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              onChange={(e) => setForm({ ...form, phone: sanitizeDigits(e.target.value, 10) })}
+              placeholder="0991234567"
             />
+            {form.phone && phoneError && (
+              <p className="text-xs text-destructive">{phoneError}</p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="email">Email</Label>
@@ -277,7 +354,7 @@ export function OwnersPage() {
             <Button type="button" variant="outline" onClick={closeForm}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={isSaving}>
+            <Button type="submit" disabled={isSaving || !!idError || !!phoneError}>
               {isSaving ? "Guardando..." : editing ? "Guardar cambios" : "Crear propietario"}
             </Button>
           </div>

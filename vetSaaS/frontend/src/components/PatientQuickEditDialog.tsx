@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useApiClient } from "@/api/client"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/toast"
+import { sanitizeWeightInput, validateWeight } from "@/lib/validators"
 import type { Patient } from "@/types"
 
 interface QuickForm {
@@ -79,11 +80,14 @@ export function PatientQuickEditDialog({ open, onClose, patientId, patientName }
     onError: (e: Error) => setError(e.message),
   })
 
+  const weightError = useMemo(() => validateWeight(form.weight), [form.weight])
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
+    if (weightError) { setError(weightError); return }
     mutation.mutate({
-      weight: form.weight ? parseFloat(form.weight) : null,
+      weight: form.weight ? parseFloat(form.weight.replace(",", ".")) : null,
       sex: form.sex || null,
       is_sterilized: form.is_sterilized === "" ? null : form.is_sterilized === "true",
       microchip_number: form.microchip_number || null,
@@ -136,12 +140,14 @@ export function PatientQuickEditDialog({ open, onClose, patientId, patientName }
             <Label htmlFor="qp_weight" className="text-xs">Peso (kg)</Label>
             <Input
               id="qp_weight"
-              type="number"
-              step="0.01"
-              min="0"
+              inputMode="decimal"
+              placeholder="Ej. 12.5"
               value={form.weight}
-              onChange={(e) => setForm({ ...form, weight: e.target.value })}
+              onChange={(e) => setForm({ ...form, weight: sanitizeWeightInput(e.target.value) })}
             />
+            {form.weight && weightError && (
+              <p className="text-xs text-destructive">{weightError}</p>
+            )}
           </div>
         </div>
 

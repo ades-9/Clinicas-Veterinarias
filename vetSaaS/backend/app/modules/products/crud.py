@@ -11,9 +11,11 @@ from app.modules.products.schemas import (
     ProductCategoryUpdate,
     ProductCreate,
     ProductRead,
+    ProductsList,
     ProductUpdate,
     StockMovementCreate,
     StockMovementRead,
+    StockMovementsList,
 )
 
 _CATEGORY_SELECT = "SELECT id, clinic_id, name, created_at FROM product_categories WHERE deleted_at IS NULL"
@@ -106,35 +108,50 @@ async def list_products(
     is_medication: bool | None = None,
     limit: int = 50,
     offset: int = 0,
-) -> list[ProductRead]:
+) -> ProductsList:
     await set_rls_context(session, clinic_id)
     filters = ""
     params: dict = {"limit": limit, "offset": offset}
+    count_params: dict = {}
     if search:
-        filters += (
+        clause = (
             " AND (LOWER(p.name) LIKE :search"
             " OR LOWER(COALESCE(p.sku, '')) LIKE :search"
             " OR LOWER(COALESCE(c.name, '')) LIKE :search)"
         )
+        filters += clause
         params["search"] = f"%{search.lower()}%"
+        count_params["search"] = params["search"]
     if category_id:
         filters += " AND p.category_id = :category_id"
         params["category_id"] = category_id
+        count_params["category_id"] = category_id
     if low_stock:
         filters += " AND p.stock <= p.min_stock"
     if is_active is not None:
         filters += " AND p.is_active = :is_active"
         params["is_active"] = is_active
+        count_params["is_active"] = is_active
     if in_stock:
         filters += " AND p.stock > 0"
     if is_medication is not None:
         filters += " AND p.is_medication = :is_medication"
         params["is_medication"] = is_medication
-    result = await session.execute(
+        count_params["is_medication"] = is_medication
+
+    items_result = await session.execute(
         text(f"{_PRODUCT_SELECT}{filters} ORDER BY p.name LIMIT :limit OFFSET :offset"),
         params,
     )
-    return [ProductRead(**row) for row in result.mappings()]
+    items = [ProductRead(**row) for row in items_result.mappings()]
+
+    count_sql = (
+        "SELECT COUNT(*) FROM products p "
+        "LEFT JOIN product_categories c ON c.id = p.category_id AND c.deleted_at IS NULL "
+        "WHERE p.deleted_at IS NULL" + filters
+    )
+    total = (await session.execute(text(count_sql), count_params)).scalar() or 0
+    return ProductsList(items=items, total=total)
 
 
 async def get_product(product_id: str, clinic_id: str, session: AsyncSession) -> ProductRead:
@@ -208,18 +225,23 @@ async def list_stock_movements(
     product_id: str | None = None,
     limit: int = 50,
     offset: int = 0,
-) -> list[StockMovementRead]:
+) -> StockMovementsList:
     await set_rls_context(session, clinic_id)
     filters = ""
     params: dict = {"limit": limit, "offset": offset}
+    count_params: dict = {}
     if product_id:
         filters = " AND sm.product_id = :product_id"
         params["product_id"] = product_id
-    result = await session.execute(
+        count_params["product_id"] = product_id
+    items_result = await session.execute(
         text(f"{_MOVEMENT_SELECT} WHERE TRUE{filters} ORDER BY sm.created_at DESC LIMIT :limit OFFSET :offset"),
         params,
     )
-    return [StockMovementRead(**row) for row in result.mappings()]
+    items = [StockMovementRead(**row) for row in items_result.mappings()]
+    count_sql = "SELECT COUNT(*) FROM stock_movements sm WHERE TRUE" + filters
+    total = (await session.execute(text(count_sql), count_params)).scalar() or 0
+    return StockMovementsList(items=items, total=total)
 
 
 async def create_stock_movement(

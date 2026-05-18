@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useApiClient } from "@/api/client"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { useToast } from "@/components/ui/toast"
+import { sanitizeDigits, validateEcuadorId, validatePhone10 } from "@/lib/validators"
 import type { Owner } from "@/types"
 
 interface QuickForm {
@@ -69,9 +70,17 @@ export function OwnerQuickEditDialog({ open, onClose, ownerId, ownerName }: Prop
     onError: (e: Error) => setError(e.message),
   })
 
+  const idError = useMemo(
+    () => (form.id_number ? validateEcuadorId(form.id_number) : null),
+    [form.id_number]
+  )
+  const phoneError = useMemo(() => validatePhone10(form.phone), [form.phone])
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
+    if (idError) { setError(idError); return }
+    if (phoneError) { setError(phoneError); return }
     mutation.mutate({
       id_number: form.id_number || null,
       phone: form.phone || null,
@@ -95,23 +104,33 @@ export function OwnerQuickEditDialog({ open, onClose, ownerId, ownerName }: Prop
         </p>
 
         <div className="space-y-1.5">
-          <Label htmlFor="qo_doc" className="text-xs">Documento</Label>
+          <Label htmlFor="qo_doc" className="text-xs">Cédula (10 dígitos)</Label>
           <Input
             id="qo_doc"
+            inputMode="numeric"
+            maxLength={10}
             value={form.id_number}
-            onChange={(e) => setForm({ ...form, id_number: e.target.value })}
+            onChange={(e) => setForm({ ...form, id_number: sanitizeDigits(e.target.value, 10) })}
           />
+          {form.id_number && idError && (
+            <p className="text-xs text-destructive">{idError}</p>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label htmlFor="qo_phone" className="text-xs">Teléfono</Label>
+            <Label htmlFor="qo_phone" className="text-xs">Teléfono (10 dígitos)</Label>
             <Input
               id="qo_phone"
               type="tel"
+              inputMode="numeric"
+              maxLength={10}
               value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              onChange={(e) => setForm({ ...form, phone: sanitizeDigits(e.target.value, 10) })}
             />
+            {form.phone && phoneError && (
+              <p className="text-xs text-destructive">{phoneError}</p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="qo_email" className="text-xs">Email</Label>
@@ -153,7 +172,7 @@ export function OwnerQuickEditDialog({ open, onClose, ownerId, ownerName }: Prop
           <Button type="button" variant="outline" onClick={onClose}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={mutation.isPending}>
+          <Button type="submit" disabled={mutation.isPending || !!idError || !!phoneError}>
             {mutation.isPending ? "Guardando..." : "Guardar cambios"}
           </Button>
         </div>

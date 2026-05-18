@@ -66,3 +66,8 @@ class SaleRead(BaseModel):
     notes: str | None
     created_at: datetime
     items: list[SaleItemRead]
+
+
+class SalesList(BaseModel):
+    items: list[SaleRead]
+    total: int

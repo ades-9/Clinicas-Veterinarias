@@ -3,7 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import set_rls_context
-from app.modules.patients.schemas import PatientCreate, PatientRead, PatientUpdate
+from app.modules.patients.schemas import PatientCreate, PatientRead, PatientsList, PatientUpdate
 
 _PATIENT_SELECT = """
     SELECT p.id, p.clinic_id, p.owner_id, o.full_name AS owner_name,
@@ -29,21 +29,53 @@ async def list_patients(
     owner_id: str | None = None,
     limit: int = 50,
     offset: int = 0,
-) -> list[PatientRead]:
+) -> PatientsList:
     await set_rls_context(session, clinic_id)
 
     filters = ""
     params: dict = {"limit": limit, "offset": offset}
+    count_params: dict = {}
 
+    if q:
+        filters += " AND (p.name ILIKE :q OR p.vaccination_code ILIKE :q OR o.full_name ILIKE :q)"
+        params["q"] = f"%{q}%"
+        count_params["q"] = params["q"]
+    if owner_id:
+        filters += " AND p.owner_id = :owner_id"
+        params["owner_id"] = owner_id
+        count_params["owner_id"] = owner_id
+
+    items_result = await session.execute(
+        text(f"{_PATIENT_SELECT}{filters} ORDER BY p.name LIMIT :limit OFFSET :offset"),
+        params,
+    )
+    items = [PatientRead(**row) for row in items_result.mappings()]
+
+    count_sql = (
+        "SELECT COUNT(*) FROM patients p JOIN owners o ON o.id = p.owner_id "
+        "WHERE p.deleted_at IS NULL" + filters
+    )
+    total = (await session.execute(text(count_sql), count_params)).scalar() or 0
+    return PatientsList(items=items, total=total)
+
+
+async def list_all_patients_for_export(
+    clinic_id: str,
+    session: AsyncSession,
+    q: str | None = None,
+    owner_id: str | None = None,
+) -> list[PatientRead]:
+    await set_rls_context(session, clinic_id)
+    filters = ""
+    params: dict = {}
     if q:
         filters += " AND (p.name ILIKE :q OR p.vaccination_code ILIKE :q OR o.full_name ILIKE :q)"
         params["q"] = f"%{q}%"
     if owner_id:
         filters += " AND p.owner_id = :owner_id"
         params["owner_id"] = owner_id
-
     result = await session.execute(
-        text(f"{_PATIENT_SELECT}{filters} ORDER BY p.name LIMIT :limit OFFSET :offset"),
+        text(f"{_PATIENT_SELECT}{filters} ORDER BY p.name"),
         params,
     )
     return [PatientRead(**row) for row in result.mappings()]

@@ -182,16 +182,17 @@ export function ConsultationModal({ appointment, onClose, onFinalized }: Props) 
     return () => clearTimeout(t)
   }, [medSearch])
 
-  const { data: medications = [], isFetching: medsFetching } = useQuery({
+  const { data: medsData, isFetching: medsFetching } = useQuery({
     queryKey: ["medications-search", debouncedMedSearch],
     queryFn: () =>
-      api.get<Product[]>(
+      api.get<{ items: Product[]; total: number }>(
         `/products?limit=20&is_active=true&is_medication=true${
           debouncedMedSearch ? `&q=${encodeURIComponent(debouncedMedSearch)}` : ""
         }`
       ),
     staleTime: 30_000,
   })
+  const medications = medsData?.items ?? []
   // Dialogs (modo "aplicado en esta consulta" → onSubmitDraft acumula)
   const [appliedVaccDialogOpen, setAppliedVaccDialogOpen] = useState(false)
   const [appliedDewDialogOpen, setAppliedDewDialogOpen] = useState(false)
@@ -250,10 +251,10 @@ export function ConsultationModal({ appointment, onClose, onFinalized }: Props) 
     return () => clearTimeout(t)
   }, [productSearch])
 
-  const { data: products = [], isFetching: productsFetching } = useQuery({
+  const { data: productsData, isFetching: productsFetching } = useQuery({
     queryKey: ["products-search", debouncedProductSearch],
     queryFn: () =>
-      api.get<Product[]>(
+      api.get<{ items: Product[]; total: number }>(
         `/products?limit=20&is_active=true&in_stock=true${
           debouncedProductSearch
             ? `&q=${encodeURIComponent(debouncedProductSearch)}`
@@ -263,6 +264,7 @@ export function ConsultationModal({ appointment, onClose, onFinalized }: Props) 
     staleTime: 30_000,
     enabled: step === 2,
   })
+  const products = productsData?.items ?? []
 
   // Precargar TODOS los servicios de la cita en el carrito
   useEffect(() => {

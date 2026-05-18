@@ -55,7 +55,7 @@ _UPCOMING_SQL = """
     LEFT JOIN last_reminders lr
         ON lr.patient_id = au.patient_id
        AND lr.type = (CASE WHEN au.kind = 'vaccine' THEN 'vaccine_due' ELSE 'deworming_due' END)
-    WHERE au.next_dose_at <= (CURRENT_DATE + (:days_ahead || ' days')::interval)::date
+    WHERE au.next_dose_at <= (CURRENT_DATE + (:days_ahead * INTERVAL '1 day'))::date
     ORDER BY au.next_dose_at, p.name
 """
 

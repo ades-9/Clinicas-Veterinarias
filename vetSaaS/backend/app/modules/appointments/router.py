@@ -13,6 +13,7 @@ from app.modules.appointments.schemas import (
     AppointmentServiceCreate,
     AppointmentServiceRead,
     AppointmentServiceUpdate,
+    AppointmentsList,
     AppointmentUpdate,
 )
 
@@ -60,7 +61,7 @@ async def delete_service(
 
 # ---- appointments ----
 
-@router.get("", response_model=list[AppointmentRead])
+@router.get("", response_model=AppointmentsList)
 async def list_appointments(
     appointment_status: str | None = Query(default=None, alias="status"),
     service_type: str | None = Query(default=None),
